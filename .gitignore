@@ -37,8 +37,8 @@ Thumbs.db
 # Cursor
 .cursor/
 
-# Django runtime uploads (regenerate or use fixtures)
-dolls1/backend/media/uploads/
+# Django runtime uploads (regenerate or use fixtures); keep folder with .gitkeep
+dolls1/backend/media/uploads/*
 !dolls1/backend/media/uploads/.gitkeep
 
 # Local backup archives (do not commit)
