@@ -1,0 +1,11 @@
+parameter_name,parameter_value,parameter_type,effective_start_date,effective_end_date,is_active
+service_level_target,0.95,float,2020-01-01,2025-12-31,True
+lead_time_buffer_days,15,integer,2020-01-01,2025-12-31,True
+christmas_window_start,10-15,month_day,2020-01-01,2025-12-31,True
+christmas_window_end,01-07,month_day,2020-01-01,2025-12-31,True
+easter_window_start,02-20,month_day,2020-01-01,2025-12-31,True
+easter_window_end,04-07,month_day,2020-01-01,2025-12-31,True
+configuration_accuracy_target,0.99,float,2020-01-01,2025-12-31,True
+on_time_ship_target,0.98,float,2020-01-01,2025-12-31,True
+min_cpk,1.33,float,2020-01-01,2025-12-31,True
+target_rty,0.95,float,2020-01-01,2025-12-31,True

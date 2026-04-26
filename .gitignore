@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+.env
+.env.*
+*.sqlite3
+db.sqlite3
+*.pem
+References/
+
+# Node / frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.sw?
+
+# Cursor
+.cursor/
+
+# Django runtime uploads (regenerate or use fixtures)
+dolls1/backend/media/uploads/
+!dolls1/backend/media/uploads/.gitkeep
+
+# Local backup archives (do not commit)
+*.zip
+
+# Logs
+*.log
+logs/

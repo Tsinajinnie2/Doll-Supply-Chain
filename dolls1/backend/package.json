@@ -1,0 +1,12 @@
+{
+  "name": "dolls1-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Django backend task runner via npm scripts",
+  "scripts": {
+    "install": "python -m pip install -r requirements.txt",
+    "dev": "python manage.py runserver",
+    "start": "python manage.py runserver",
+    "migrate": "python manage.py migrate"
+  }
+}

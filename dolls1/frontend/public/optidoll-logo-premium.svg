@@ -1,0 +1,30 @@
+<svg width="1200" height="340" viewBox="0 0 1200 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OptiDoll logo premium variant">
+  <defs>
+    <linearGradient id="odPremGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a5f3fc"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="odPremDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#1f2937"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="340" fill="#f1f5f9"/>
+
+  <g transform="translate(44 52)">
+    <rect x="0" y="0" width="250" height="250" rx="34" fill="url(#odPremDark)"/>
+    <path d="M125 46 L176 79 L176 146 C176 178 154 205 125 212 C96 205 74 178 74 146 L74 79 Z" fill="none" stroke="url(#odPremGold)" stroke-width="8"/>
+    <circle cx="125" cy="109" r="20" fill="#e2e8f0"/>
+    <path d="M97 164 Q125 142 153 164" fill="none" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="74" cy="79" r="4" fill="#67e8f9"/>
+    <circle cx="176" cy="79" r="4" fill="#67e8f9"/>
+    <circle cx="125" cy="212" r="4" fill="#67e8f9"/>
+  </g>
+
+  <g transform="translate(326 100)">
+    <text x="0" y="0" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="88" font-weight="800" fill="#111827">OptiDoll</text>
+    <rect x="2" y="16" width="386" height="5" rx="2.5" fill="url(#odPremGold)"/>
+    <text x="4" y="62" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="27" font-style="italic" fill="#0369a1">Flawless dolls, On demand!</text>
+  </g>
+</svg>

@@ -1,0 +1,6 @@
+-- ============================================
+-- OptiDoll Unified Seed Template (SQL)
+-- Sample inventory rows removed (catalog cleanup).
+-- Add INSERT ... VALUES rows as needed; columns must match CSV/ZIP:
+-- part_number, part_name, available_qty, reorder_point_qty
+-- ============================================

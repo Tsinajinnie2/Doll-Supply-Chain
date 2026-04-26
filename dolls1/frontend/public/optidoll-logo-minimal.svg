@@ -1,0 +1,21 @@
+<svg width="1200" height="340" viewBox="0 0 1200 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OptiDoll logo minimal variant">
+  <defs>
+    <linearGradient id="odMinGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="340" fill="#ffffff"/>
+
+  <g transform="translate(58 74)">
+    <circle cx="92" cy="92" r="84" fill="none" stroke="#0f172a" stroke-width="12"/>
+    <path d="M92 34 L92 150 M48 92 L136 92" stroke="url(#odMinGrad)" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="92" cy="92" r="16" fill="#0f172a"/>
+  </g>
+
+  <g transform="translate(250 108)">
+    <text x="0" y="0" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="86" font-weight="700" fill="#0f172a">OptiDoll</text>
+    <text x="4" y="52" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="26" font-style="italic" fill="#0ea5e9">Flawless dolls, On demand!</text>
+  </g>
+</svg>

@@ -1,0 +1,18 @@
+<svg width="1300" height="280" viewBox="0 0 1300 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OptiDoll mid breakpoint brand lockup">
+  <defs>
+    <linearGradient id="odmGradA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f9a8d4"/>
+      <stop offset="55%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1300" height="280" rx="16" fill="#fcf7ff"/>
+
+  <g transform="translate(26 120)">
+    <text x="0" y="0" font-family="'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive" font-size="116" font-weight="800" font-style="italic" fill="#2a1b46" letter-spacing="0.2">Opti</text>
+    <text x="240" y="0" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="110" font-weight="800" fill="url(#odmGradA)" letter-spacing="0.1">Doll</text>
+    <text x="484" y="-50" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="30" font-weight="700" fill="#7c3aed">™</text>
+    <text x="8" y="64" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="36" font-style="italic" fill="#9d174d">Flawless dolls, On demand!</text>
+  </g>
+</svg>

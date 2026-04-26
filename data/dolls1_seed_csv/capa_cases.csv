@@ -1,0 +1,114 @@
+capa_id,opened_date,due_date,defect_type,root_cause_code,owner_role,status,corrective_action,effectiveness_verified_flag
+CAPA_0001,2020-01-05,2020-01-19,hair_detachment,unclear_work_instruction,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0002,2020-02-10,2020-02-24,damaged_return,shipping_damage,Quality Lead,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0003,2020-03-25,2020-04-08,wrongly_assembled,training_gap,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0004,2020-03-04,2020-03-18,damaged_return,wrong_bin,Supplier Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0005,2020-03-13,2020-03-27,hair_detachment,shipping_damage,Quality Lead,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0006,2020-04-11,2020-04-25,torso_seam_defect,supplier_variation,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0007,2020-05-03,2020-05-17,cosmetic_defect,wrong_bin,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0008,2020-06-22,2020-07-06,damaged_return,supplier_variation,Quality Lead,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0009,2020-08-07,2020-08-21,cosmetic_defect,shipping_damage,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0010,2020-09-09,2020-09-23,missing_component,rush_overload,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0011,2020-10-11,2020-10-25,wrongly_assembled,tool_jig_issue,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0012,2020-10-09,2020-10-23,hair_detachment,shipping_damage,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0013,2020-11-15,2020-11-29,cosmetic_defect,training_gap,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0014,2021-01-24,2021-02-07,packaging_error,supplier_variation,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0015,2021-02-08,2021-02-22,missing_component,unclear_work_instruction,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0016,2021-02-07,2021-02-21,damaged_return,rush_overload,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0017,2021-03-04,2021-03-18,wrongly_assembled,shipping_damage,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0018,2021-03-09,2021-03-23,damaged_return,training_gap,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0019,2021-03-13,2021-03-27,packaging_error,wrong_bin,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0020,2021-03-14,2021-03-28,torso_seam_defect,supplier_variation,Quality Lead,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0021,2021-04-09,2021-04-23,packaging_error,wrong_bin,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0022,2021-04-19,2021-05-03,torso_seam_defect,shipping_damage,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0023,2021-05-09,2021-05-23,missing_component,training_gap,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0024,2021-05-23,2021-06-06,cosmetic_defect,rush_overload,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0025,2021-06-19,2021-07-03,missing_component,training_gap,Supply Chain Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0026,2021-06-05,2021-06-19,damaged_return,unclear_work_instruction,Quality Lead,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0027,2021-06-19,2021-07-03,hair_detachment,shipping_damage,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0028,2021-09-07,2021-09-21,missing_component,rush_overload,Quality Lead,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0029,2021-09-22,2021-10-06,cosmetic_defect,unclear_work_instruction,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0030,2021-09-13,2021-09-27,packaging_error,training_gap,Quality Lead,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0031,2021-10-23,2021-11-06,missing_component,supplier_variation,Quality Lead,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0032,2021-10-22,2021-11-05,hair_detachment,tool_jig_issue,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0033,2021-10-06,2021-10-20,torso_seam_defect,shipping_damage,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0034,2021-11-22,2021-12-06,torso_seam_defect,training_gap,Quality Lead,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0035,2021-12-16,2021-12-30,cosmetic_defect,shipping_damage,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0036,2021-12-02,2021-12-16,torso_seam_defect,tool_jig_issue,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0037,2022-01-03,2022-01-17,cosmetic_defect,supplier_variation,Supply Chain Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0038,2022-01-03,2022-01-17,hair_detachment,shipping_damage,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0039,2022-02-12,2022-02-26,damaged_return,rush_overload,Quality Lead,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0040,2022-02-21,2022-03-07,cosmetic_defect,shipping_damage,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0041,2022-02-06,2022-02-20,packaging_error,shipping_damage,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0042,2022-02-14,2022-02-28,torso_seam_defect,shipping_damage,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0043,2022-03-10,2022-03-24,damaged_return,unclear_work_instruction,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0044,2022-04-24,2022-05-08,wrongly_assembled,wrong_bin,Assembly Supervisor,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0045,2022-04-11,2022-04-25,missing_component,training_gap,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0046,2022-04-08,2022-04-22,damaged_return,supplier_variation,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0047,2022-04-21,2022-05-05,late_shipment,wrong_bin,Quality Lead,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0048,2022-05-23,2022-06-06,wrongly_assembled,shipping_damage,Quality Lead,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0049,2022-05-07,2022-05-21,hair_detachment,wrong_bin,Supplier Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0050,2022-06-07,2022-06-21,missing_component,rush_overload,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0051,2022-07-21,2022-08-04,hair_detachment,training_gap,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0052,2022-07-16,2022-07-30,torso_seam_defect,rush_overload,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0053,2022-08-17,2022-08-31,cosmetic_defect,tool_jig_issue,Quality Lead,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0054,2022-08-03,2022-08-17,packaging_error,tool_jig_issue,Quality Lead,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0055,2022-09-17,2022-10-01,wrongly_assembled,training_gap,Supply Chain Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0056,2022-09-06,2022-09-20,damaged_return,unclear_work_instruction,Supplier Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0057,2022-09-18,2022-10-02,cosmetic_defect,wrong_bin,Supply Chain Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0058,2022-10-17,2022-10-31,cosmetic_defect,supplier_variation,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0059,2023-01-08,2023-01-22,wrongly_assembled,unclear_work_instruction,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0060,2023-02-09,2023-02-23,missing_component,unclear_work_instruction,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0061,2023-02-16,2023-03-02,packaging_error,wrong_bin,Supplier Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0062,2023-02-17,2023-03-03,torso_seam_defect,wrong_bin,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0063,2023-03-17,2023-03-31,missing_component,shipping_damage,Assembly Supervisor,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0064,2023-05-15,2023-05-29,wrongly_assembled,tool_jig_issue,Supplier Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0065,2023-06-23,2023-07-07,wrongly_assembled,tool_jig_issue,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0066,2023-06-04,2023-06-18,missing_component,rush_overload,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0067,2023-06-17,2023-07-01,damaged_return,unclear_work_instruction,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0068,2023-06-22,2023-07-06,packaging_error,tool_jig_issue,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0069,2023-08-19,2023-09-02,wrongly_assembled,supplier_variation,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0070,2023-10-15,2023-10-29,cosmetic_defect,training_gap,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0071,2023-10-21,2023-11-04,late_shipment,shipping_damage,Supply Chain Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0072,2023-10-11,2023-10-25,packaging_error,unclear_work_instruction,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0073,2023-12-19,2024-01-02,missing_component,tool_jig_issue,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0074,2023-12-22,2024-01-05,damaged_return,wrong_bin,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0075,2024-01-05,2024-01-19,cosmetic_defect,wrong_bin,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0076,2024-01-19,2024-02-02,hair_detachment,tool_jig_issue,Quality Lead,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0077,2024-02-02,2024-02-16,missing_component,wrong_bin,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0078,2024-03-11,2024-03-25,cosmetic_defect,training_gap,Quality Lead,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0079,2024-03-13,2024-03-27,packaging_error,supplier_variation,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0080,2024-03-21,2024-04-04,hair_detachment,unclear_work_instruction,Quality Lead,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0081,2024-04-12,2024-04-26,damaged_return,wrong_bin,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0082,2024-05-02,2024-05-16,damaged_return,training_gap,Assembly Supervisor,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0083,2024-05-08,2024-05-22,late_shipment,supplier_variation,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0084,2024-06-23,2024-07-07,wrongly_assembled,unclear_work_instruction,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0085,2024-06-03,2024-06-17,cosmetic_defect,tool_jig_issue,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0086,2024-07-05,2024-07-19,missing_component,tool_jig_issue,Supply Chain Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0087,2024-07-08,2024-07-22,torso_seam_defect,rush_overload,Quality Lead,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0088,2024-08-18,2024-09-01,wrongly_assembled,training_gap,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0089,2024-08-10,2024-08-24,hair_detachment,supplier_variation,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0090,2024-09-11,2024-09-25,missing_component,wrong_bin,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0091,2024-09-06,2024-09-20,torso_seam_defect,shipping_damage,Quality Lead,verified,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0092,2024-11-02,2024-11-16,missing_component,supplier_variation,Supplier Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0093,2024-12-24,2025-01-07,missing_component,shipping_damage,Supplier Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0094,2025-01-23,2025-02-06,wrongly_assembled,supplier_variation,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0095,2025-01-09,2025-01-23,packaging_error,rush_overload,Quality Lead,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0096,2025-01-07,2025-01-21,hair_detachment,training_gap,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0097,2025-02-02,2025-02-16,packaging_error,rush_overload,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0098,2025-02-19,2025-03-05,hair_detachment,wrong_bin,Supplier Manager,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0099,2025-02-11,2025-02-25,torso_seam_defect,tool_jig_issue,Supplier Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0100,2025-03-25,2025-04-08,packaging_error,wrong_bin,Supplier Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0101,2025-04-16,2025-04-30,missing_component,shipping_damage,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0102,2025-04-17,2025-05-01,cosmetic_defect,training_gap,Supplier Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0103,2025-04-18,2025-05-02,packaging_error,supplier_variation,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0104,2025-06-15,2025-06-29,wrongly_assembled,wrong_bin,Assembly Supervisor,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0105,2025-06-11,2025-06-25,missing_component,wrong_bin,Quality Lead,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0106,2025-07-18,2025-08-01,missing_component,supplier_variation,Supply Chain Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0107,2025-07-09,2025-07-23,damaged_return,wrong_bin,Assembly Supervisor,in_progress,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0108,2025-07-05,2025-07-19,hair_detachment,tool_jig_issue,Supplier Manager,verified,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0109,2025-07-20,2025-08-03,torso_seam_defect,wrong_bin,Quality Lead,open,"Review standard work, retrain staff, and verify next lot/process sample.",True
+CAPA_0110,2025-08-16,2025-08-30,damaged_return,rush_overload,Assembly Supervisor,closed,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0111,2025-09-03,2025-09-17,torso_seam_defect,unclear_work_instruction,Supply Chain Manager,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0112,2025-10-04,2025-10-18,wrongly_assembled,tool_jig_issue,Assembly Supervisor,open,"Review standard work, retrain staff, and verify next lot/process sample.",False
+CAPA_0113,2025-10-11,2025-10-25,packaging_error,unclear_work_instruction,Supply Chain Manager,closed,"Review standard work, retrain staff, and verify next lot/process sample.",True
