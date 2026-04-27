@@ -17,6 +17,8 @@ from .views import (
     CapaCaseViewSet,
     SupplierLotQualityViewSet,
     dashboard_summary,
+    demand_forecast_workbench,
+    operational_workbench,
 )
 
 router = DefaultRouter()
@@ -39,4 +41,6 @@ router.register("supplier-lot-quality", SupplierLotQualityViewSet)
 urlpatterns = [
     path("", include(router.urls)),
     path("dashboard-summary/", dashboard_summary),
+    path("demand-forecast/workbench/", demand_forecast_workbench),
+    path("operational-workbench/", operational_workbench),
 ]

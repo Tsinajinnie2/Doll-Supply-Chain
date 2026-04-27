@@ -9,3 +9,14 @@ configuration_accuracy_target,0.99,float,2020-01-01,2025-12-31,True
 on_time_ship_target,0.98,float,2020-01-01,2025-12-31,True
 min_cpk,1.33,float,2020-01-01,2025-12-31,True
 target_rty,0.95,float,2020-01-01,2025-12-31,True
+dpmo_target,3400,float,2020-01-01,2027-12-31,True
+ship_within_hours,48,integer,2020-01-01,2027-12-31,True
+default_safety_stock_days,14,integer,2020-01-01,2027-12-31,True
+quality_cpk_current,1.21,float,2020-01-01,2027-12-31,True
+dpmo_opportunities_per_unit,12,integer,2020-01-01,2027-12-31,True
+christmas_season_months,"11,12",string,2020-01-01,2027-12-31,True
+easter_season_months,"3,4",string,2020-01-01,2027-12-31,True
+mega_promo_months,"1,6",string,2020-01-01,2027-12-31,True
+christmas_season_lift_mult,1.28,float,2020-01-01,2027-12-31,True
+easter_season_lift_mult,1.18,float,2020-01-01,2027-12-31,True
+mega_promo_multiplier,3.0,float,2020-01-01,2027-12-31,True

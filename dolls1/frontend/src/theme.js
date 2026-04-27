@@ -80,5 +80,20 @@ export const theme = createTheme({
         },
       },
     },
+    /** Menus, Select dropdowns, etc. default to `zIndex.modal` and can paint under Dialog backdrops. */
+    MuiPopover: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          zIndex: theme.zIndex.modal + 50,
+        }),
+      },
+    },
+    MuiPopper: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          zIndex: theme.zIndex.modal + 50,
+        }),
+      },
+    },
   },
 });

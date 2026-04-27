@@ -15,7 +15,9 @@ from rest_framework.response import Response
 from . import catalog_parts
 from .models import *
 from .serializers import *
-from .services.six_sigma import dpmo, yield_rate, configuration_accuracy
+from .services.six_sigma import yield_rate, configuration_accuracy
+from .services.demand_forecast_workbench import build_workbench_payload
+from .services.operational_workbench import build_operational_payload, compute_dpmo_snapshot
 
 _CATALOG_TEMPLATE_ROWS = catalog_parts.build_catalog_rows()
 
@@ -462,6 +464,19 @@ class SupplierLotQualityViewSet(viewsets.ModelViewSet):
 
 
 @api_view(["GET"])
+def demand_forecast_workbench(request):
+    """Monthly doll demand forecast with seasonality, mega promos, BOM, and recommended orders."""
+    payload = build_workbench_payload()
+    return Response(payload)
+
+
+@api_view(["GET"])
+def operational_workbench(request):
+    """Shared snapshot for Orders & Targets, Quality / Six Sigma, and Settings (forecast + ops KPIs)."""
+    return Response(build_operational_payload())
+
+
+@api_view(["GET"])
 def dashboard_summary(request):
     total_orders = CustomerOrder.objects.count()
     shipped_orders = CustomerOrder.objects.exclude(shipped_at=None).count()
@@ -471,14 +486,27 @@ def dashboard_summary(request):
             on_time_orders += 1
 
     total_defects = sum(d.quantity for d in DefectEvent.objects.all())
-    wrong_defects = DefectEvent.objects.filter(
-        defect_type__defect_code__icontains="wrong"
-    ).count()
+    wrong_orders_n = (
+        DefectEvent.objects.filter(defect_type__defect_code__icontains="wrong", order__isnull=False)
+        .values("order")
+        .distinct()
+        .count()
+    )
 
-    correct_builds = max(total_orders - wrong_defects, 0)
+    correct_builds = max(total_orders - wrong_orders_n, 0)
     inventory_count = InventorySnapshot.objects.count()
     supplier_count = Supplier.objects.count()
     recommendation_count = OrderRecommendation.objects.count()
+
+    daily_slice = list(DailyTarget.objects.order_by("-target_date")[:14])
+    opp = 12
+    p_opp = ForecastParameter.objects.filter(parameter_name="dpmo_opportunities_per_unit", is_active=True).first()
+    if p_opp:
+        try:
+            opp = int(float(p_opp.parameter_value))
+        except (TypeError, ValueError):
+            opp = 12
+    estimated_dpmo, _ = compute_dpmo_snapshot(total_defects, total_orders, shipped_orders, daily_slice, opp)
 
     return Response({
         "total_orders": total_orders,
@@ -486,7 +514,7 @@ def dashboard_summary(request):
         "on_time_48h_rate": yield_rate(on_time_orders, shipped_orders),
         "total_defects": total_defects,
         "configuration_accuracy": configuration_accuracy(correct_builds, total_orders),
-        "estimated_dpmo": dpmo(total_defects, max(total_orders, 1), 12),
+        "estimated_dpmo": estimated_dpmo,
         "inventory_records": inventory_count,
         "supplier_count": supplier_count,
         "recommendation_count": recommendation_count,

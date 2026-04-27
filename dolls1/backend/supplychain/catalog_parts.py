@@ -12,17 +12,24 @@ FILENAME_SQL = f"{CATALOG_STEM}.sql"
 FILENAME_ZIP = f"{CATALOG_STEM}.zip"
 FILENAME_README_MD = f"{CATALOG_STEM}.README.md"
 
+# Stable SKU-OPT numbers for legs (do not renumber when catalog order changes).
+LEG_PART_NUMBER_BY_NAME = {
+    "Leg Deep": "SKU-OPT-0066",
+    "Leg Light": "SKU-OPT-0067",
+    "Leg Medium": "SKU-OPT-0068",
+}
+
+# Stable SKUs for silicone head shells (UK SilicaForms + other head-family suppliers).
+HEAD_PART_NUMBER_BY_NAME = {
+    "Head Deep": "SKU-OPT-0069",
+    "Head Light": "SKU-OPT-0070",
+    "Head Medium": "SKU-OPT-0071",
+}
+
 
 def _collect_raw() -> list[tuple[str, str]]:
     """(part_name, part_type) — part_type matches Part.PART_TYPES keys."""
     raw: list[tuple[str, str]] = []
-
-    for shape in ("Square",):
-        raw.append((f"Head {shape}", "head"))
-
-    for shape in ("Square",):
-        for tone in ("Light", "Medium", "Deep"):
-            raw.append((f"Head {shape} {tone}", "head"))
 
     for color in ("Amber", "Blue", "Green", "Brown", "Hazel", "Lavender"):
         raw.append((f"Eyes {color}", "eyes"))
@@ -30,6 +37,7 @@ def _collect_raw() -> list[tuple[str, str]]:
     for tone in ("Light", "Medium", "Deep"):
         raw.append((f"Arm {tone}", "arm"))
         raw.append((f"Leg {tone}", "leg"))
+        raw.append((f"Head {tone}", "head"))
 
     raw.append(("Box Tiffany Blue", "packaging"))
     raw.append(("Box Pastel Pink", "packaging"))
@@ -52,7 +60,7 @@ def _collect_raw() -> list[tuple[str, str]]:
         "Hair Long Dreadlocks",
         "Hair Long",
     )
-    _skip_hair = frozenset({"Hair Long Sable", "Hair Long Spiral Sable"})
+    _skip_hair = frozenset({"Hair Long Sable", "Hair Long Spiral Sable", "Hair Straight Bob Brown"})
     for base in hair_bases:
         for color in colors:
             label = f"{base} {color}"
@@ -70,9 +78,14 @@ def build_catalog_rows() -> list[dict]:
     for i, (part_name, part_type) in enumerate(_collect_raw(), start=1):
         avail = 180 + (i % 19) * 4
         reorder = max(45, avail // 2 - 15)
+        part_number = LEG_PART_NUMBER_BY_NAME.get(part_name)
+        if part_number is None:
+            part_number = HEAD_PART_NUMBER_BY_NAME.get(part_name)
+        if part_number is None:
+            part_number = f"SKU-OPT-{i:04d}"
         out.append(
             {
-                "part_number": f"SKU-OPT-{i:04d}",
+                "part_number": part_number,
                 "part_name": part_name,
                 "available_qty": avail,
                 "reorder_point_qty": reorder,
@@ -120,9 +133,9 @@ def template_readme_markdown() -> str:
         "- `available_qty`\n"
         "- `reorder_point_qty`\n\n"
         "## Catalog highlights\n"
-        "- Heads: Square base + Light / Medium / Deep tones\n"
+        "- Heads: Light, Medium, Deep silicone shells (fixed SKUs SKU-OPT-0069–0071)\n"
         "- Eyes: Amber, Blue, Green, Brown, Hazel, Lavender\n"
-        "- Arms & legs: Light, Medium, Deep\n"
+        "- Arms: Light, Medium, Deep · Legs: same (fixed SKUs SKU-OPT-0066–0068)\n"
         "- Boxes: Tiffany Blue, Pastel Pink, Lavender; one shared white 1 m ribbon SKU\n"
         "- Hair: Straight Bob and Long styles × six colors (alphabetical); excludes removed SKUs\n"
     )

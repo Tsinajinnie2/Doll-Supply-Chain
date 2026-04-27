@@ -32,3 +32,17 @@ SUP_PACKAGING_2,Packaging Supplier 2 Mexico,packaging,Mexico,truck,0.0,True,True
 SUP_PACKAGING_3,Packaging Supplier 3 China,packaging,China,ocean,0.2,True,True,False,False,False,2026-09-28,True
 SUP_PACKAGING_4,Packaging Supplier 4 Germany,packaging,Germany,air,0.12,True,True,True,False,False,2026-12-31,True
 SUP_PACKAGING_5,Packaging Supplier 5 Canada,packaging,Canada,truck,0.05,True,True,True,False,False,2026-12-31,True
+SUP_RISK_HISU,HiSu,arm,China,ocean,0.2,True,True,True,False,False,2026-12-31,True
+SUP_RISK_INDIASIL,IndiaSilicone,arm,India,ocean,0.12,True,True,True,False,False,2026-12-31,True
+SUP_RISK_EYESAN,EyeSan,eyes,Japan,air,0.14,True,True,True,False,False,2026-12-31,True
+SUP_RISK_ETOYS,E-Toys,eyes,Pakistan,ocean,0.18,True,True,True,False,False,2026-12-31,True
+SUP_RISK_BEAUTYEYES,BeautyEyes,eyes,Canada,truck,0.05,True,True,True,False,False,2026-12-31,True
+SUP_RISK_SILICA,SilicaForms,head,UK,air,0.12,True,True,True,False,False,2026-12-31,True
+SUP_RISK_POLYSYTH,PolySyth,hair,Indonesia,ocean,0.18,True,True,True,False,False,2026-12-31,True
+SUP_RISK_HAIRYSAN,HairySan,hair,Japan,ocean,0.14,True,True,True,False,False,2026-12-31,True
+SUP_RISK_BOXINGDAY,BoxingDay,packaging,UK,air,0.12,True,True,True,False,False,2026-12-31,True
+SUP_RISK_CANADACONT,CanadaContainers,packaging,Canada,truck,0.05,True,True,True,False,False,2026-12-31,True
+SUP_RISK_BOXY,BoXy,packaging,USA,domestic,0.0,True,True,True,False,False,2026-12-31,True
+SUP_RISK_IRIS,IrisStyles,eyes,USA,domestic,0.0,True,True,True,False,False,2026-12-31,True
+SUP_RISK_BOXME,BoxMe,packaging,USA,domestic,0.0,True,True,True,False,False,2026-12-31,True
+SUP_RISK_SOFTBODY,SoftBody,torso,USA,domestic,0.0,True,True,True,True,True,2026-12-31,True

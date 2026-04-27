@@ -47,12 +47,34 @@ export async function getDefects() {
   return response.data;
 }
 
+export async function createDefectEvent(payload) {
+  const response = await axios.post(`${API_BASE}/defects/`, payload);
+  return response.data;
+}
+
+export async function createCapaCase(payload) {
+  const response = await axios.post(`${API_BASE}/capa/`, payload);
+  return response.data;
+}
+
 export async function getForecastParameters() {
   const response = await axios.get(`${API_BASE}/forecast-parameters/`, {
     params: { ordering: "parameter_name", is_active: true },
   });
   const data = response.data;
   return Array.isArray(data) ? data : data?.results ?? [];
+}
+
+/** Monthly doll demand forecast, BOM, and recommended purchase quantities. */
+export async function getDemandForecastWorkbench() {
+  const response = await axios.get(`${API_BASE}/demand-forecast/workbench/`);
+  return response.data;
+}
+
+/** Orders, quality, and settings-linked operational snapshot (shared across those pages). */
+export async function getOperationalWorkbench() {
+  const response = await axios.get(`${API_BASE}/operational-workbench/`);
+  return response.data;
 }
 
 export async function getUploads() {

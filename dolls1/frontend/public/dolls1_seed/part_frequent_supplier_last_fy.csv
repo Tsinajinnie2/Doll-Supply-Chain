@@ -1,0 +1,54 @@
+part_number,part_name,fiscal_year_label,frequent_supplier_code,frequent_supplier_name,simulated_order_lines_last_fy,simulated_share_of_part_volume_pct
+TORSO_COMPLETED,Completed soft torso,FY2025_closed_simulated,SUP_TORSO_1,Torso Supplier 1 USA,5046,31.38
+SKU-OPT-0001,Arm Deep,FY2025_closed_simulated,SUP_LIMB_3,Limb Supplier 3 China,9951,34.26
+SKU-OPT-0002,Arm Light,FY2025_closed_simulated,SUP_LIMB_1,Limb Supplier 1 Mexico,8487,24.74
+SKU-OPT-0003,Arm Medium,FY2025_closed_simulated,SUP_LIMB_1,Limb Supplier 1 Mexico,9395,31.51
+SKU-OPT-0004,Box Lavender,FY2025_closed_simulated,SUP_RISK_BOXINGDAY,BoxingDay,8818,17.85
+SKU-OPT-0005,Box Pastel Pink,FY2025_closed_simulated,SUP_PACKAGING_1,Packaging Supplier 1 USA,7350,22.21
+SKU-OPT-0006,Box Ribbon White 1 Meter,FY2025_closed_simulated,SUP_PACKAGING_3,Packaging Supplier 3 China,9294,18.16
+SKU-OPT-0007,Box Tiffany Blue,FY2025_closed_simulated,SUP_PACKAGING_4,Packaging Supplier 4 Germany,9155,13.92
+SKU-OPT-0008,Eyes Amber,FY2025_closed_simulated,SUP_RISK_IRIS,IrisStyles,9808,20.05
+SKU-OPT-0009,Eyes Blue,FY2025_closed_simulated,SUP_EYES_3,Eyes Supplier 3 China,9395,19.11
+SKU-OPT-0010,Eyes Brown,FY2025_closed_simulated,SUP_RISK_BEAUTYEYES,BeautyEyes,8801,20.08
+SKU-OPT-0011,Eyes Green,FY2025_closed_simulated,SUP_EYES_2,Eyes Supplier 2 Japan,8681,23.20
+SKU-OPT-0012,Eyes Hazel,FY2025_closed_simulated,SUP_EYES_4,Eyes Supplier 4 India,9340,18.63
+SKU-OPT-0013,Eyes Lavender,FY2025_closed_simulated,SUP_EYES_2,Eyes Supplier 2 Japan,7922,25.34
+SKU-OPT-0014,Hair Long Black,FY2025_closed_simulated,SUP_HAIR_4,Hair Supplier 4 Indonesia,9294,16.48
+SKU-OPT-0015,Hair Long Brown,FY2025_closed_simulated,SUP_HAIR_2,Hair Supplier 2 Vietnam,9915,19.12
+SKU-OPT-0016,Hair Long Copper,FY2025_closed_simulated,SUP_HAIR_3,Hair Supplier 3 Bangladesh,9427,26.00
+SKU-OPT-0017,Hair Long Dreadlocks Black,FY2025_closed_simulated,SUP_HAIR_4,Hair Supplier 4 Indonesia,9231,22.98
+SKU-OPT-0018,Hair Long Dreadlocks Brown,FY2025_closed_simulated,SUP_RISK_HAIRYSAN,HairySan,9201,18.90
+SKU-OPT-0019,Hair Long Dreadlocks Copper,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,8999,17.39
+SKU-OPT-0020,Hair Long Dreadlocks Platinum Blond,FY2025_closed_simulated,SUP_HAIR_6,Hair Supplier 6 Japan,9631,23.84
+SKU-OPT-0021,Hair Long Dreadlocks Sable,FY2025_closed_simulated,SUP_RISK_HAIRYSAN,HairySan,8033,16.88
+SKU-OPT-0022,Hair Long Dreadlocks Strawberry Blond,FY2025_closed_simulated,SUP_HAIR_6,Hair Supplier 6 Japan,9683,18.16
+SKU-OPT-0023,Hair Long Platinum Blond,FY2025_closed_simulated,SUP_HAIR_6,Hair Supplier 6 Japan,8741,25.49
+SKU-OPT-0024,Hair Long Spiral Black,FY2025_closed_simulated,SUP_RISK_POLYSYTH,PolySyth,8679,23.23
+SKU-OPT-0025,Hair Long Spiral Brown,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,8816,23.56
+SKU-OPT-0026,Hair Long Spiral Copper,FY2025_closed_simulated,SUP_HAIR_4,Hair Supplier 4 Indonesia,8307,29.68
+SKU-OPT-0027,Hair Long Spiral Platinum Blond,FY2025_closed_simulated,SUP_RISK_POLYSYTH,PolySyth,8273,22.24
+SKU-OPT-0028,Hair Long Spiral Strawberry Blond,FY2025_closed_simulated,SUP_HAIR_1,Hair Supplier 1 India,8592,19.97
+SKU-OPT-0029,Hair Long Straight Black,FY2025_closed_simulated,SUP_HAIR_6,Hair Supplier 6 Japan,9328,17.91
+SKU-OPT-0030,Hair Long Straight Brown,FY2025_closed_simulated,SUP_HAIR_4,Hair Supplier 4 Indonesia,9402,24.25
+SKU-OPT-0031,Hair Long Straight Copper,FY2025_closed_simulated,SUP_RISK_POLYSYTH,PolySyth,9869,15.52
+SKU-OPT-0032,Hair Long Straight Platinum Blond,FY2025_closed_simulated,SUP_HAIR_4,Hair Supplier 4 Indonesia,7888,19.19
+SKU-OPT-0033,Hair Long Straight Sable,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,5956,31.90
+SKU-OPT-0034,Hair Long Straight Strawberry Blond,FY2025_closed_simulated,SUP_RISK_POLYSYTH,PolySyth,9712,20.76
+SKU-OPT-0035,Hair Long Strawberry Blond,FY2025_closed_simulated,SUP_HAIR_6,Hair Supplier 6 Japan,8997,22.77
+SKU-OPT-0036,Hair Long Wavy Black,FY2025_closed_simulated,SUP_HAIR_1,Hair Supplier 1 India,8894,17.47
+SKU-OPT-0037,Hair Long Wavy Brown,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,8327,23.79
+SKU-OPT-0038,Hair Long Wavy Copper,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,6838,16.85
+SKU-OPT-0039,Hair Long Wavy Platinum Blond,FY2025_closed_simulated,SUP_HAIR_1,Hair Supplier 1 India,9585,27.99
+SKU-OPT-0040,Hair Long Wavy Sable,FY2025_closed_simulated,SUP_HAIR_2,Hair Supplier 2 Vietnam,9040,19.38
+SKU-OPT-0041,Hair Long Wavy Strawberry Blond,FY2025_closed_simulated,SUP_HAIR_1,Hair Supplier 1 India,7886,22.30
+SKU-OPT-0042,Hair Straight Bob Black,FY2025_closed_simulated,SUP_HAIR_2,Hair Supplier 2 Vietnam,9771,26.07
+SKU-OPT-0043,Hair Straight Bob Copper,FY2025_closed_simulated,SUP_HAIR_4,Hair Supplier 4 Indonesia,9583,22.10
+SKU-OPT-0044,Hair Straight Bob Platinum Blond,FY2025_closed_simulated,SUP_HAIR_6,Hair Supplier 6 Japan,9897,24.99
+SKU-OPT-0045,Hair Straight Bob Sable,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,9624,21.98
+SKU-OPT-0046,Hair Straight Bob Strawberry Blond,FY2025_closed_simulated,SUP_HAIR_5,Hair Supplier 5 Thailand,9769,15.43
+SKU-OPT-0066,Leg Deep,FY2025_closed_simulated,SUP_LIMB_3,Limb Supplier 3 China,9492,48.57
+SKU-OPT-0067,Leg Light,FY2025_closed_simulated,SUP_LEG_1,Leg Supplier 1 China,8563,32.36
+SKU-OPT-0068,Leg Medium,FY2025_closed_simulated,SUP_LEG_1,Leg Supplier 1 China,9529,29.78
+SKU-OPT-0069,Head Deep,FY2025_closed_simulated,SUP_HEAD_2,Head Supplier 2 Vietnam,9660,35.53
+SKU-OPT-0070,Head Light,FY2025_closed_simulated,SUP_HEAD_3,Head Supplier 3 China,9828,38.43
+SKU-OPT-0071,Head Medium,FY2025_closed_simulated,SUP_HEAD_3,Head Supplier 3 China,9424,33.86

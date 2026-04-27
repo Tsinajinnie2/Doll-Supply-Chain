@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import Box from "@mui/material/Box";
@@ -19,6 +19,7 @@ import IconButton from "@mui/material/IconButton";
 import CircularProgress from "@mui/material/CircularProgress";
 import Skeleton from "@mui/material/Skeleton";
 import Snackbar from "@mui/material/Snackbar";
+import LinearProgress from "@mui/material/LinearProgress";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import TableSortLabel from "@mui/material/TableSortLabel";
@@ -44,6 +45,8 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
 import Divider from "@mui/material/Divider";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -65,9 +68,12 @@ import {
   getParts,
   createSupplier,
   createSupplierPart,
-  getOrders,
   getDefects,
   getForecastParameters,
+  getDemandForecastWorkbench,
+  getOperationalWorkbench,
+  createDefectEvent,
+  createCapaCase,
   getUploads,
   uploadDataFile,
   reimportUpload,
@@ -1199,12 +1205,476 @@ function compareDefectRecords(a, b) {
   return da.localeCompare(db, undefined, { sensitivity: "base" });
 }
 
-const DASHBOARD_ALERT_CHIPS = [
-  { partType: "head", color: "error", label: "RED: Skin tone heads shortage risk" },
-  { partType: "hair", color: "warning", label: "YELLOW: Hair supplier lead time increased" },
-  { partType: "torso", color: "success", label: "GREEN: Completed torso inventory safe" },
-  { partType: null, color: "warning", label: "YELLOW: Wrong assembly rate above target" },
+const SETTINGS_PARAM_OVERRIDES_KEY = "dolls_settings_parameter_overrides";
+
+function loadRawParameterOverrides() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_PARAM_OVERRIDES_KEY);
+    if (!raw) return {};
+    const o = JSON.parse(raw);
+    return typeof o === "object" && o !== null ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Fallback when API is down or daily/weekly tables are empty before seed import. */
+const MOCK_OPERATIONAL = {
+  forecast_parameter_map: {
+    on_time_ship_target: 0.98,
+    target_rty: 0.95,
+    min_cpk: 1.33,
+    configuration_accuracy_target: 0.99,
+    dpmo_target: 3400,
+    ship_within_hours: 48,
+    service_level_target: 0.95,
+    default_safety_stock_days: 14,
+    mega_promo_multiplier: 3,
+    quality_cpk_current: 1.21,
+  },
+  forecast_parameters: [],
+  daily_operations: [
+    { target_date: "2026-04-21", target_orders: 42, actual_orders: 40, target_assembled: 42, actual_assembled: 39, target_shipped: 42, actual_shipped: 38, backlog_qty: 11, on_time_ship_rate: 0.95, season_window: "Normal" },
+    { target_date: "2026-04-22", target_orders: 42, actual_orders: 44, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 41, backlog_qty: 12, on_time_ship_rate: 0.93, season_window: "Normal" },
+    { target_date: "2026-04-23", target_orders: 42, actual_orders: 41, target_assembled: 42, actual_assembled: 40, target_shipped: 42, actual_shipped: 39, backlog_qty: 14, on_time_ship_rate: 0.95, season_window: "Normal" },
+    { target_date: "2026-04-24", target_orders: 42, actual_orders: 45, target_assembled: 42, actual_assembled: 44, target_shipped: 42, actual_shipped: 42, backlog_qty: 15, on_time_ship_rate: 0.93, season_window: "Normal" },
+    { target_date: "2026-04-25", target_orders: 36, actual_orders: 34, target_assembled: 36, actual_assembled: 35, target_shipped: 36, actual_shipped: 33, backlog_qty: 16, on_time_ship_rate: 0.97, season_window: "Normal" },
+    { target_date: "2026-04-26", target_orders: 36, actual_orders: 35, target_assembled: 36, actual_assembled: 36, target_shipped: 36, actual_shipped: 34, backlog_qty: 17, on_time_ship_rate: 0.97, season_window: "Normal" },
+    { target_date: "2026-04-27", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 41, target_shipped: 42, actual_shipped: 40, backlog_qty: 18, on_time_ship_rate: 0.93, season_window: "Normal" },
+  ],
+  weekly_operations: [
+    { week_start: "2026-04-06", week_end: "2026-04-12", target_orders: 294, actual_orders: 281, target_assembled: 294, actual_assembled: 276, target_shipped: 294, actual_shipped: 268, ending_backlog: 14, on_time_ship_rate: 0.955 },
+    { week_start: "2026-04-13", week_end: "2026-04-19", target_orders: 294, actual_orders: 288, target_assembled: 294, actual_assembled: 290, target_shipped: 294, actual_shipped: 285, ending_backlog: 16, on_time_ship_rate: 0.962 },
+    { week_start: "2026-04-20", week_end: "2026-04-26", target_orders: 294, actual_orders: 292, target_assembled: 294, actual_assembled: 291, target_shipped: 294, actual_shipped: 288, ending_backlog: 18, on_time_ship_rate: 0.959 },
+  ],
+  orders_summary: {
+    on_time_48h_rate: 0.968,
+    on_time_ship_target: 0.98,
+    ship_within_hours: 48,
+    total_orders: 1240,
+    shipped_orders: 1196,
+    latest_backlog: 18,
+  },
+  quality: {
+    pareto: [
+      { label: "Late Shipment", count: 24 },
+      { label: "Wrong Assembly", count: 18 },
+      { label: "Damaged Return", count: 9 },
+      { label: "Cosmetic Defect", count: 8 },
+      { label: "Packaging Error", count: 7 },
+    ],
+    root_causes: [
+      { label: "Unclear Work Instruction", count: 28 },
+      { label: "Training Gap", count: 14 },
+      { label: "Wrong Part in Bin", count: 12 },
+    ],
+    dpmo: 3900,
+    dpmo_target: 3400,
+    process_yield: 0.953,
+    rty_target: 0.95,
+    configuration_accuracy: 0.982,
+    configuration_accuracy_target: 0.99,
+    cpk: 1.21,
+    cpk_target: 1.33,
+    total_defect_units: 58,
+    copq_total_90d: 28450,
+    copq_breakdown: {
+      quality_cost_lines: { scrap: 1200, rework: 3400, return_cost: 800, warranty: 450, expedite: 600 },
+      quality_costs_recorded: 6450,
+      returns_and_rework_charges: 22000,
+      combined_90d: 28450,
+    },
+    capa_summary: { by_status: { open: 1, in_progress: 1, closed: 0 }, open: 1, in_progress: 1, closed: 0, total: 2 },
+    defect_monthly_trend: [
+      { year_month: "2025-11", defect_units: 42 },
+      { year_month: "2025-12", defect_units: 38 },
+      { year_month: "2026-01", defect_units: 45 },
+      { year_month: "2026-02", defect_units: 33 },
+      { year_month: "2026-03", defect_units: 51 },
+      { year_month: "2026-04", defect_units: 28 },
+    ],
+    dpmo_basis: {
+      order_count: 1240,
+      shipped_count: 1196,
+      recent_throughput_units: 282,
+      units_for_dpmo: 1240,
+      defect_units: 58,
+      opportunities_per_unit: 12,
+    },
+    defect_types: [
+      { id: 1, defect_code: "wrong_assembly", defect_name: "Wrong Assembly" },
+      { id: 2, defect_code: "damaged_return", defect_name: "Damaged Return" },
+      { id: 3, defect_code: "missing_component", defect_name: "Missing Component" },
+    ],
+  },
+  capa: [
+    { capa_number: "CAPA-DEMO-1", title: "Late Shipment — unclear work instruction", status: "open", opened_date: "2026-04-01", due_date: "2026-04-20", effectiveness_verified: false },
+    { capa_number: "CAPA-DEMO-2", title: "Wrong Assembly — training gap", status: "in_progress", opened_date: "2026-03-15", due_date: "2026-04-30", effectiveness_verified: false },
+  ],
+  purpose: {
+    orders: "Track daily and weekly performance: orders received, assembled, shipped, 48-hour ship goal, backlog, and whether operations are keeping up.",
+    quality:
+      "Monitor and improve product quality. Tracks defects (wrong assembly, damage, and other codes), calculates metrics like DPMO and yield, shows root causes, manages CAPA (corrective actions), and tracks cost of poor quality. Helps reduce mistakes and improve consistency.",
+    settings: "Fine-tune forecasting parameters, safety stock, ship and quality targets, and other thresholds — values here drive the Orders and Quality views.",
+  },
+};
+
+const OperationalContext = createContext(null);
+
+function mergeForecastParameterMaps(base, overrides) {
+  const out = { ...(base || {}) };
+  for (const [k, v] of Object.entries(overrides || {})) {
+    if (v === "" || v === null || v === undefined) continue;
+    const num = Number(v);
+    out[k] = Number.isFinite(num) && String(v).trim() !== "" ? num : v;
+  }
+  return out;
+}
+
+function OperationalDataProvider({ children }) {
+  const [operational, setOperational] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState("live");
+  const [overrideVersion, setOverrideVersion] = useState(0);
+
+  const parameterOverrides = useMemo(() => loadRawParameterOverrides(), [overrideVersion]);
+
+  const reloadOperational = useCallback(() => {
+    setLoading(true);
+    getOperationalWorkbench()
+      .then((data) => {
+        setOperational(data);
+        setSource("live");
+      })
+      .catch(() => {
+        setOperational(MOCK_OPERATIONAL);
+        setSource("mock");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    reloadOperational();
+  }, [reloadOperational]);
+
+  const mergedParameterMap = useMemo(
+    () => mergeForecastParameterMaps(operational?.forecast_parameter_map ?? {}, parameterOverrides),
+    [operational, parameterOverrides]
+  );
+
+  const saveParameterOverrides = useCallback((patch) => {
+    const next = { ...loadRawParameterOverrides(), ...patch };
+    localStorage.setItem(SETTINGS_PARAM_OVERRIDES_KEY, JSON.stringify(next));
+    setOverrideVersion((v) => v + 1);
+  }, []);
+
+  const clearParameterOverrides = useCallback(() => {
+    localStorage.removeItem(SETTINGS_PARAM_OVERRIDES_KEY);
+    setOverrideVersion((v) => v + 1);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      operational,
+      operationalLoading: loading,
+      operationalSource: source,
+      reloadOperational,
+      mergedParameterMap,
+      parameterOverrides,
+      saveParameterOverrides,
+      clearParameterOverrides,
+    }),
+    [operational, loading, source, reloadOperational, mergedParameterMap, parameterOverrides, saveParameterOverrides, clearParameterOverrides]
+  );
+
+  return <OperationalContext.Provider value={value}>{children}</OperationalContext.Provider>;
+}
+
+/** Traffic-light rollup for the mission-control header (ops + quality + backlog trajectory). */
+function computeExecutiveRiskBand({ rate, shipTarget, dpmo, dpmoTarget, backlogSeries }) {
+  const r = Number(rate);
+  const st = Number(shipTarget);
+  const shipGap = Number.isFinite(r) && Number.isFinite(st) ? st - r : 0;
+  const dt = Number(dpmoTarget);
+  const dpmoT = Number.isFinite(dt) && dt > 0 ? dt : 3400;
+  const dRaw = Number(dpmo);
+  const d = Number.isFinite(dRaw) ? dRaw : 0;
+  const ratio = dpmoT > 0 ? d / dpmoT : 1;
+  let backlogRising = false;
+  if (Array.isArray(backlogSeries) && backlogSeries.length >= 2) {
+    const b0 = Number(backlogSeries[backlogSeries.length - 2]) || 0;
+    const b1 = Number(backlogSeries[backlogSeries.length - 1]) || 0;
+    backlogRising = b1 > b0 + Math.max(1, b0 * 0.08);
+  }
+  if (shipGap > 0.03 || ratio > 1.22) return "red";
+  if (shipGap > 0.008 || ratio > 1.05 || backlogRising) return "yellow";
+  return "green";
+}
+
+function buildMissionControlAlerts({
+  quality,
+  shipTarget,
+  rate,
+  shipHours,
+  daily,
+  mergedParameterMap,
+  forecastData,
+  forecastStatus,
+  confTarget,
+  dpmoTarget,
+}) {
+  const alerts = [];
+  const dpmoT = Number(dpmoTarget) || 3400;
+  const dpmoRaw = Number(quality?.dpmo ?? 0);
+  const dpmoVal = Number.isFinite(dpmoRaw) ? dpmoRaw : 0;
+  const shipRate = Number(rate);
+  const shipTargetN = Number(shipTarget);
+  const shipOk = Number.isFinite(shipRate) && Number.isFinite(shipTargetN);
+  const capaSum = quality?.capa_summary ?? {};
+  const capaOpen = Number(capaSum.open ?? 0) + Number(capaSum.in_progress ?? 0);
+  const confT = Number(confTarget) || 0.99;
+  const confAcc = Number(quality?.configuration_accuracy ?? 0);
+
+  if (shipOk && shipRate < shipTargetN - 0.02) {
+    alerts.push({
+      pri: 0,
+      severity: "error",
+      title: "Shipping performance at risk",
+      detail: `${shipHours}-hour on-time rate is ${(shipRate * 100).toFixed(1)}% vs ${(shipTargetN * 100).toFixed(0)}% target. Review capacity, backlog, and partner handoffs.`,
+      to: "/orders",
+      linkLabel: "Orders & targets",
+    });
+  } else if (shipOk && shipRate < shipTargetN - 0.001) {
+    alerts.push({
+      pri: 1,
+      severity: "warning",
+      title: "Slightly below ship target",
+      detail: `${shipHours}-hour on-time rate ${(shipRate * 100).toFixed(1)}% vs ${(shipTargetN * 100).toFixed(0)}% target.`,
+      to: "/orders",
+      linkLabel: "Orders & targets",
+    });
+  }
+
+  const last = daily.length ? daily[daily.length - 1] : null;
+  if (last && Number(last.target_shipped) > 0 && Number(last.actual_shipped ?? 0) < Number(last.target_shipped)) {
+    alerts.push({
+      pri: 1,
+      severity: "warning",
+      title: "Latest day under ship plan",
+      detail: `Shipped ${last.actual_shipped ?? 0} vs target ${last.target_shipped} (${last.target_date}).`,
+      to: "/orders",
+      linkLabel: "Orders & targets",
+    });
+  }
+
+  if (daily.length >= 2) {
+    const b0 = Number(daily[daily.length - 2].backlog_qty) || 0;
+    const b1 = Number(daily[daily.length - 1].backlog_qty) || 0;
+    if (b1 > b0 + Math.max(1, b0 * 0.05)) {
+      alerts.push({
+        pri: 2,
+        severity: "warning",
+        title: "Backlog trending up",
+        detail: `End-of-day backlog ${b1} vs ${b0} on the prior day.`,
+        to: "/orders",
+        linkLabel: "Orders & targets",
+      });
+    }
+  }
+
+  if (dpmoVal > dpmoT * 1.18) {
+    alerts.push({
+      pri: 0,
+      severity: "error",
+      title: "DPMO well above target",
+      detail: `Estimated DPMO ${Math.round(dpmoVal).toLocaleString()} vs target ${Math.round(dpmoT).toLocaleString()}.`,
+      to: "/quality",
+      linkLabel: "Quality",
+    });
+  } else if (dpmoVal > dpmoT) {
+    alerts.push({
+      pri: 2,
+      severity: "warning",
+      title: "DPMO above target",
+      detail: `Estimated DPMO ${Math.round(dpmoVal).toLocaleString()} vs target ${Math.round(dpmoT).toLocaleString()}.`,
+      to: "/quality",
+      linkLabel: "Quality",
+    });
+  }
+
+  if (confAcc > 0 && confAcc < confT - 0.015) {
+    alerts.push({
+      pri: 3,
+      severity: "warning",
+      title: "Configuration accuracy below goal",
+      detail: `${(confAcc * 100).toFixed(1)}% vs ${(confT * 100).toFixed(0)}% target — check build instructions and kitting.`,
+      to: "/quality",
+      linkLabel: "Quality",
+    });
+  }
+
+  if (capaOpen > 0) {
+    alerts.push({
+      pri: 4,
+      severity: "info",
+      title: `${capaOpen} active CAPA case${capaOpen === 1 ? "" : "s"}`,
+      detail: "Corrective actions need ownership and follow-up until closed.",
+      to: "/quality",
+      linkLabel: "Quality",
+    });
+  }
+
+  const top = quality?.pareto?.[0];
+  if (top && Number(top.count) >= 8) {
+    alerts.push({
+      pri: 5,
+      severity: "info",
+      title: `Leading defect driver: ${top.label}`,
+      detail: `${top.count} units in the current Pareto view — prioritize containment.`,
+      to: "/quality",
+      linkLabel: "Quality",
+    });
+  }
+
+  const plan = forecastData?.parts_plan;
+  if (Array.isArray(plan) && plan.length) {
+    const hot = [...plan]
+      .filter((p) => Number(p.recommended_order_qty) > 0)
+      .sort((a, b) => Number(b.recommended_order_qty) - Number(a.recommended_order_qty))[0];
+    if (hot) {
+      alerts.push({
+        pri: 3,
+        severity: "warning",
+        title: `Parts gap: ${hot.part_name ?? hot.part_number}`,
+        detail: `Recommended buy ${Number(hot.recommended_order_qty).toLocaleString()} units (forecast vs available + safety).`,
+        to: "/forecasting",
+        linkLabel: "Forecasting",
+      });
+    }
+  }
+
+  if (forecastStatus === "empty") {
+    alerts.push({
+      pri: 6,
+      severity: "info",
+      title: "Demand forecast needs history",
+      detail: "Import doll sales history to unlock forward-looking demand and BOM buy recommendations.",
+      to: "/upload",
+      linkLabel: "Upload data",
+    });
+  } else if (forecastStatus === "mock") {
+    alerts.push({
+      pri: 7,
+      severity: "info",
+      title: "Forecast workbench offline",
+      detail: "Start the API and seed sales/parameters to see 12-month demand on this dashboard.",
+      to: "/forecasting",
+      linkLabel: "Forecasting",
+    });
+  }
+
+  const promoM = mergedParameterMap?.mega_promo_multiplier;
+  if (promoM != null && Number(promoM) >= 2.5 && forecastData?.forecast?.length) {
+    const peak = [...forecastData.forecast].sort((a, b) => Number(b.doll_units_forecast) - Number(a.doll_units_forecast))[0];
+    if (peak?.year_month) {
+      alerts.push({
+        pri: 8,
+        severity: "info",
+        title: `Demand peak: ${peak.year_month}`,
+        detail: `Plan materials and capacity around ~${Number(peak.doll_units_forecast).toLocaleString()} doll units in that month.`,
+        to: "/forecasting",
+        linkLabel: "Forecasting",
+      });
+    }
+  }
+
+  alerts.sort((a, b) => a.pri - b.pri);
+  return alerts.slice(0, 12);
+}
+
+function useOperationalWorkbench() {
+  const ctx = useContext(OperationalContext);
+  if (!ctx) {
+    throw new Error("useOperationalWorkbench must be used within OperationalDataProvider");
+  }
+  return ctx;
+}
+
+const PRODUCTION_TEAM_LABELS = ["Production Team 1", "Production Team 2", "Production Team 3", "Production Team 4"];
+const PRODUCTION_SHIFTS = [
+  { key: "day", label: "Day Shift" },
+  { key: "night", label: "Night Shift" },
 ];
+
+/** Integer doll counts per team × shift; sum equals totalDolls; max(cell) − min(non-empty) ≤ 1 when total > 0. */
+function buildEvenTeamShiftPlan(totalDolls) {
+  const total = Math.max(0, Math.round(Number(totalDolls) || 0));
+  const nTeams = PRODUCTION_TEAM_LABELS.length;
+  const nShifts = PRODUCTION_SHIFTS.length;
+  const slots = nTeams * nShifts;
+  const base = slots ? Math.floor(total / slots) : 0;
+  const remainder = slots ? total % slots : 0;
+  const rows = PRODUCTION_TEAM_LABELS.map((teamLabel, teamIdx) => {
+    const cells = PRODUCTION_SHIFTS.map((shift, shiftIdx) => {
+      const slotIndex = teamIdx * nShifts + shiftIdx;
+      const qty = base + (slotIndex < remainder ? 1 : 0);
+      return { shiftKey: shift.key, shiftLabel: shift.label, qty };
+    });
+    const rowSum = cells.reduce((s, c) => s + c.qty, 0);
+    return { teamLabel, cells, rowSum };
+  });
+  const shiftColumnTotals = PRODUCTION_SHIFTS.map((shift, shiftIdx) =>
+    rows.reduce((s, r) => s + r.cells[shiftIdx].qty, 0)
+  );
+  return { total, slots, base, remainder, rows, shiftColumnTotals };
+}
+
+/** Same-day wall-clock milestones (workday 8:00 AM–5:00 PM). */
+const FULFILLMENT_CHECKPOINTS = [
+  { label: "10:00 AM", hour: 10, minute: 0 },
+  { label: "12:00 Noon", hour: 12, minute: 0 },
+  { label: "3:00 PM", hour: 15, minute: 0 },
+  { label: "5:00 PM", hour: 17, minute: 0 },
+];
+
+const WORKDAY_START_MIN = 8 * 60;
+const WORKDAY_END_MIN = 17 * 60;
+/** Share of the workday: boxing trails assembly; dispatch to partner trails boxing. */
+const PIPELINE_LAG_BOXED = 0.07;
+const PIPELINE_LAG_DISPATCH = 0.14;
+
+function fractionThroughWorkday(hour, minute) {
+  const t = hour * 60 + minute;
+  if (t <= WORKDAY_START_MIN) return 0;
+  if (t >= WORKDAY_END_MIN) return 1;
+  return (t - WORKDAY_START_MIN) / (WORKDAY_END_MIN - WORKDAY_START_MIN);
+}
+
+function clamp01(x) {
+  return Math.max(0, Math.min(1, x));
+}
+
+/** Cumulative doll counts by checkpoint: completed (assembly), boxed, dispatched to shipping partner. */
+function buildFulfillmentCheckpointRows(totalDolls) {
+  const total = Math.max(0, Math.round(Number(totalDolls) || 0));
+  if (!total) return [];
+
+  return FULFILLMENT_CHECKPOINTS.map((cp) => {
+    const frac = fractionThroughWorkday(cp.hour, cp.minute);
+    const completed = Math.round(total * frac);
+    const boxedProgress = clamp01((frac - PIPELINE_LAG_BOXED) / (1 - PIPELINE_LAG_BOXED));
+    const boxed = Math.round(total * boxedProgress);
+    const dispatchProgress = clamp01((frac - PIPELINE_LAG_DISPATCH) / (1 - PIPELINE_LAG_DISPATCH));
+    const dispatched = Math.round(total * dispatchProgress);
+    return {
+      timeLabel: cp.label,
+      completed,
+      boxed,
+      dispatched,
+      dayProgressPct: Math.round(frac * 100),
+    };
+  });
+}
 
 function App() {
   const isMobile = useMediaQuery("(max-width:900px)");
@@ -1259,6 +1729,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <OperationalDataProvider>
       <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default", overflowX: "hidden" }}>
           <AppBar position="fixed" color="transparent" elevation={0} sx={{ zIndex: 1201 }}>
             <Toolbar
@@ -1472,92 +1943,358 @@ function App() {
             </Box>
           </Box>
         </Box>
+      </OperationalDataProvider>
     </BrowserRouter>
   );
 }
 
 function Dashboard() {
-  const [summary, setSummary] = useState(mockSummary);
+  const { operational, operationalLoading, operationalSource, mergedParameterMap } = useOperationalWorkbench();
+  const [dsSummary, setDsSummary] = useState(mockSummary);
   const [backendStatus, setBackendStatus] = useState("checking");
+  const [forecastData, setForecastData] = useState(null);
+  const [forecastStatus, setForecastStatus] = useState("checking");
 
   useEffect(() => {
+    let cancelled = false;
     getDashboardSummary()
       .then((data) => {
-        setSummary(data);
-        setBackendStatus("connected");
+        if (!cancelled) {
+          setDsSummary(data);
+          setBackendStatus("connected");
+        }
       })
       .catch(() => {
-        setSummary(mockSummary);
-        setBackendStatus("mock");
+        if (!cancelled) {
+          setDsSummary(mockSummary);
+          setBackendStatus("mock");
+        }
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const onTime = `${(summary.on_time_48h_rate * 100).toFixed(1)}%`;
-  const accuracy = `${(summary.configuration_accuracy * 100).toFixed(1)}%`;
+  useEffect(() => {
+    let cancelled = false;
+    getDemandForecastWorkbench()
+      .then((data) => {
+        if (cancelled) return;
+        setForecastData(data);
+        if (data?.error === "no_history") setForecastStatus("empty");
+        else setForecastStatus("live");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setForecastData(null);
+          setForecastStatus("mock");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const base = operational ?? MOCK_OPERATIONAL;
+  const hasLiveDaily = (operational?.daily_operations?.length ?? 0) > 0;
+  const daily = hasLiveDaily ? operational.daily_operations.slice(-14) : MOCK_OPERATIONAL.daily_operations;
+  const orders = base.orders_summary ?? MOCK_OPERATIONAL.orders_summary;
+  const quality = base.quality ?? MOCK_OPERATIONAL.quality;
+
+  const shipHours = Number(mergedParameterMap.ship_within_hours ?? orders.ship_within_hours ?? 48);
+  const shipTarget = Number(mergedParameterMap.on_time_ship_target ?? orders.on_time_ship_target ?? 0.98);
+  const rate = Number(orders.on_time_48h_rate ?? dsSummary.on_time_48h_rate ?? 0);
+  const dpmoTarget = Number(mergedParameterMap.dpmo_target ?? quality.dpmo_target ?? 3400);
+  const confTarget = Number(mergedParameterMap.configuration_accuracy_target ?? quality.configuration_accuracy_target ?? 0.99);
+  const rawDpmo = Number(quality.dpmo ?? dsSummary.estimated_dpmo);
+  const dpmoVal = Number.isFinite(rawDpmo) ? rawDpmo : 0;
+  const dpmoBasis = quality.dpmo_basis;
+  const defectUnits = Number(quality.total_defect_units ?? dsSummary.total_defects ?? 0);
+  const capaOpen = Number(quality.capa_summary?.open ?? 0) + Number(quality.capa_summary?.in_progress ?? 0);
+  const totalOrders = Number(orders.total_orders ?? dsSummary.total_orders ?? 0);
+  const shippedOrders = Number(orders.shipped_orders ?? dsSummary.shipped_orders ?? 0);
+  const latestBacklog = orders.latest_backlog ?? "—";
+
+  const dailyLabels = useMemo(() => daily.map((d) => d.target_date?.slice(5) ?? ""), [daily]);
+  const shipActual = useMemo(() => daily.map((d) => d.actual_shipped ?? 0), [daily]);
+  const backlogSeries = useMemo(() => daily.map((d) => d.backlog_qty ?? 0), [daily]);
+
+  const fcLabels = useMemo(() => (forecastData?.forecast ?? []).map((f) => f.year_month?.slice(2) ?? ""), [forecastData]);
+  const fcValues = useMemo(() => (forecastData?.forecast ?? []).map((f) => f.doll_units_forecast ?? 0), [forecastData]);
+  const nextMoDemand = forecastData?.forecast?.[0]?.doll_units_forecast;
+
+  const riskBand = useMemo(
+    () => computeExecutiveRiskBand({ rate, shipTarget, dpmo: dpmoVal, dpmoTarget, backlogSeries }),
+    [rate, shipTarget, dpmoVal, dpmoTarget, backlogSeries]
+  );
+
+  const alerts = useMemo(
+    () =>
+      buildMissionControlAlerts({
+        quality,
+        shipTarget,
+        rate,
+        shipHours,
+        daily,
+        mergedParameterMap,
+        forecastData,
+        forecastStatus,
+        confTarget,
+        dpmoTarget,
+      }),
+    [quality, shipTarget, rate, shipHours, daily, mergedParameterMap, forecastData, forecastStatus, confTarget, dpmoTarget]
+  );
+
+  const rateF = Number(rate);
+  const shipTargetF = Number(shipTarget);
+  const shipKpiColor =
+    !Number.isFinite(rateF) || !Number.isFinite(shipTargetF)
+      ? "primary"
+      : rateF >= shipTargetF - 0.005
+        ? "success"
+        : rateF >= shipTargetF - 0.03
+          ? "warning"
+          : "error";
+  const dpmoTargetF = Number(dpmoTarget);
+  const dpmoKpiColor =
+    !Number.isFinite(dpmoTargetF) || dpmoTargetF <= 0
+      ? "warning"
+      : dpmoVal <= dpmoTargetF
+        ? "success"
+        : dpmoVal <= dpmoTargetF * 1.12
+          ? "warning"
+          : "error";
+  const accuracy = `${((quality.configuration_accuracy ?? dsSummary.configuration_accuracy) * 100).toFixed(1)}%`;
+  const defectMonthly = quality.defect_monthly_trend;
+  const defectTrendLabels = useMemo(
+    () => (defectMonthly ?? []).map((t) => String(t.year_month ?? "").slice(2)),
+    [defectMonthly]
+  );
+  const defectTrendValues = useMemo(() => (defectMonthly ?? []).map((t) => t.defect_units ?? 0), [defectMonthly]);
 
   return (
-    <Page title="Executive Overview" subtitle="Real-time visibility across service level, quality, and fulfillment risk.">
-      {backendStatus === "checking" ? (
-        <Stack direction="row" spacing={1} sx={{ mb: 2, alignItems: "center" }}>
-          <CircularProgress size={18} />
-          <Typography variant="body2" color="text.secondary">
-            Syncing latest backend KPIs...
-          </Typography>
-        </Stack>
-      ) : null}
-      {backendStatus === "connected" ? (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          Connected to Django backend.
-        </Alert>
-      ) : backendStatus === "mock" ? (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Backend not reached. Showing mock dashboard data.
-        </Alert>
-      ) : null}
+    <Page
+      title="Executive Overview"
+      subtitle="Mission control: one place to see orders, shipping, quality, demand, and what deserves attention right now."
+    >
+      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+        {backendStatus === "checking" || operationalLoading ? <CircularProgress size={18} /> : null}
+        <Chip
+          size="small"
+          variant="outlined"
+          color={backendStatus === "connected" ? "success" : "warning"}
+          label={`Summary API: ${backendStatus === "checking" ? "…" : backendStatus === "connected" ? "live" : "demo"}`}
+        />
+        <Chip
+          size="small"
+          variant="outlined"
+          color={operationalSource === "live" ? "success" : "warning"}
+          label={`Operations: ${operationalLoading ? "…" : operationalSource === "live" ? "live" : "demo"}`}
+        />
+        <Chip
+          size="small"
+          variant="outlined"
+          color={forecastStatus === "live" ? "success" : forecastStatus === "empty" ? "default" : "warning"}
+          label={`Forecast: ${forecastStatus === "checking" ? "…" : forecastStatus === "live" ? "live" : forecastStatus === "empty" ? "no history" : "offline"}`}
+        />
+      </Stack>
 
       <Grid container spacing={2.5}>
-        <Grid size={{ xs: 12, md: 3 }}>
-          <KpiCard title="Inventory Risk" value={summary.risk_level?.toUpperCase()} subtitle="Current planning status" color={riskToColor(summary.risk_level)} />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Executive pulse"
+            value={riskBand.toUpperCase()}
+            subtitle="Ship goal vs actual, DPMO vs Settings target, backlog trend"
+            color={riskToColor(riskBand)}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title={`${shipHours}-hour ship rate`}
+            value={Number.isFinite(Number(rate)) ? `${(Number(rate) * 100).toFixed(1)}%` : "—"}
+            subtitle={`Target ${(Number(shipTarget) * 100).toFixed(0)}% (Settings)`}
+            color={shipKpiColor}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard title="Latest backlog" value={latestBacklog} subtitle="End of last reported ops day" color="primary" />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Orders in system"
+            value={totalOrders.toLocaleString()}
+            subtitle={`Shipped: ${shippedOrders.toLocaleString()}`}
+            color="primary"
+          />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 3 }}>
-          <KpiCard title="48-Hour Ship Rate" value={onTime} subtitle="Target: 98%" color="warning" />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Estimated DPMO"
+            value={Math.round(dpmoVal).toLocaleString()}
+            subtitle={
+              dpmoBasis?.units_for_dpmo != null
+                ? `Target ≤ ${Math.round(Number(dpmoTarget) || 0).toLocaleString()} · ${Number(dpmoBasis.units_for_dpmo).toLocaleString()} doll-unit basis × ${dpmoBasis.opportunities_per_unit ?? 12} opp`
+                : `Target ≤ ${Math.round(Number(dpmoTarget) || 0).toLocaleString()}`
+            }
+            color={dpmoKpiColor}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard title="Defect units (logged)" value={defectUnits.toLocaleString()} subtitle="Total quantity across defect events" color="warning" />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard title="Active CAPAs" value={capaOpen.toLocaleString()} subtitle="Open + in progress" color={capaOpen > 0 ? "warning" : "success"} />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Next month demand (forecast)"
+            value={nextMoDemand != null ? Number(nextMoDemand).toLocaleString() : "—"}
+            subtitle={forecastData?.horizon_doll_units_total != null ? `12-mo horizon: ${Number(forecastData.horizon_doll_units_total).toLocaleString()} dolls` : "From forecasting workbench"}
+            color="secondary"
+          />
         </Grid>
 
-        <Grid size={{ xs: 12, md: 3 }}>
-          <KpiCard title="Configuration Accuracy" value={accuracy} subtitle="Correct custom builds" color="success" />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Configuration accuracy"
+            value={accuracy}
+            subtitle={`Target ${(confTarget * 100).toFixed(0)}%`}
+            color={Number(quality.configuration_accuracy ?? dsSummary.configuration_accuracy) >= confTarget - 0.01 ? "success" : "warning"}
+          />
         </Grid>
-
-        <Grid size={{ xs: 12, md: 3 }}>
-          <KpiCard title="Estimated DPMO" value={Math.round(summary.estimated_dpmo)} subtitle="Six Sigma quality metric" color="warning" />
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Inventory SKUs tracked"
+            value={Number(dsSummary.inventory_records ?? 0).toLocaleString()}
+            subtitle={`Suppliers: ${Number(dsSummary.supplier_count ?? 0)} · Buy recs: ${Number(dsSummary.recommendation_count ?? 0)}`}
+            color="primary"
+          />
         </Grid>
       </Grid>
 
       <Grid container spacing={2.5} sx={{ mt: 0.5 }}>
-        <Grid size={{ xs: 12, md: 8 }}>
-          <CardBox title="Demand Forecast">
+        <Grid size={{ xs: 12, lg: 7 }}>
+          <CardBox title="Demand forecast — next 12 months (doll units)">
+            {forecastStatus === "checking" ? (
+              <Skeleton variant="rounded" height={220} />
+            ) : forecastStatus === "empty" ? (
+              <Alert severity="info">No sales history yet. Upload doll demand data to populate this trend.</Alert>
+            ) : fcValues.length ? (
+              <>
+                <MiniLineChart
+                  labels={fcLabels}
+                  values={fcValues}
+                  color={primaryMain}
+                  yLabel="Doll units"
+                  yValueUnit=" dolls"
+                  chipLabel="Forecast / month"
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                  Peaks reflect seasonality and promo multipliers from Settings. Detail:{" "}
+                  <Button component={Link} to="/forecasting" size="small" sx={{ verticalAlign: "baseline", p: 0, minWidth: 0 }}>
+                    Forecasting workbench
+                  </Button>
+                  .
+                </Typography>
+              </>
+            ) : (
+              <Alert severity="warning">Forecast workbench unavailable. Start the API to load forward demand.</Alert>
+            )}
+          </CardBox>
+        </Grid>
+
+        <Grid size={{ xs: 12, lg: 5 }}>
+          <CardBox title="Needs attention now">
+            {alerts.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No critical signals in the current snapshot — keep monitoring ship rate, backlog, and quality on the pages below.
+              </Typography>
+            ) : (
+              <Stack spacing={1.25}>
+                {alerts.map((a) => (
+                  <Alert
+                    key={`${a.pri}-${a.title}`}
+                    severity={a.severity}
+                    variant="outlined"
+                    action={
+                      a.to ? (
+                        <Button component={Link} to={a.to} size="small" color="inherit">
+                          {a.linkLabel ?? "Open"}
+                        </Button>
+                      ) : null
+                    }
+                  >
+                    <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                      {a.title}
+                    </Typography>
+                    {a.detail ? (
+                      <Typography variant="body2" sx={{ mt: 0.5 }}>
+                        {a.detail}
+                      </Typography>
+                    ) : null}
+                  </Alert>
+                ))}
+              </Stack>
+            )}
+          </CardBox>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <CardBox title="Fulfillment — shipped vs plan (last 14 days)">
             <MiniLineChart
-              labels={["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]}
-              values={[820, 880, 1030, 970, 1120, 1240, 1160, 1190, 1320, 1680, 2010, 2260]}
-              color={primaryMain}
-              yLabel="Orders"
-              targetValue={1500}
+              labels={dailyLabels.length ? dailyLabels : ["—"]}
+              values={shipActual.length ? shipActual : [0]}
+              color="#2563eb"
+              yLabel="Units"
+              yValueUnit=" shipped"
+              chipLabel="Actual shipped / day"
+            />
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+              Compare to plan:{" "}
+              <Button component={Link} to="/orders" size="small" sx={{ verticalAlign: "baseline", p: 0, minWidth: 0 }}>
+                Orders & targets
+              </Button>{" "}
+              for targets, backlog, and production plan.
+            </Typography>
+          </CardBox>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <CardBox title="Backlog trend (end of day)">
+            <MiniLineChart
+              labels={dailyLabels.length ? dailyLabels : ["—"]}
+              values={backlogSeries.length ? backlogSeries : [0]}
+              color="#b45309"
+              yLabel="Backlog"
+              yValueUnit=" units"
+              chipLabel="Backlog EOD"
             />
           </CardBox>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 4 }}>
-          <CardBox title="Current Alerts">
-            <Stack spacing={1}>
-              {[...DASHBOARD_ALERT_CHIPS]
-                .sort((a, b) => {
-                  const c = partTypeSortIndex(a.partType) - partTypeSortIndex(b.partType);
-                  return c !== 0 ? c : a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
-                })
-                .map((chip) => (
-                  <Chip key={chip.label} color={chip.color} label={chip.label} />
-                ))}
-            </Stack>
+        <Grid size={{ xs: 12 }}>
+          <CardBox title="Quality — defect units by month">
+            {defectTrendValues.length ? (
+              <MiniLineChart
+                labels={defectTrendLabels}
+                values={defectTrendValues}
+                color="#cb333b"
+                yLabel="Defect units"
+                yValueUnit=" units"
+                chipLabel="Logged defects / month"
+              />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No monthly defect trend yet. Log defects on the Quality page or import seed data.
+              </Typography>
+            )}
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+              <Button component={Link} to="/quality" size="small" sx={{ verticalAlign: "baseline", p: 0, minWidth: 0 }}>
+                Quality / Six Sigma
+              </Button>{" "}
+              for Pareto, CAPA, and COPQ.
+            </Typography>
           </CardBox>
         </Grid>
       </Grid>
@@ -1623,6 +2360,137 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+const DAILY_PLAN_UNIT_CHK_CAP = 24;
+
+/**
+ * Printable daily plan: timeline checklists + per-unit checkboxes for increments + defects section (Quality / Six Sigma).
+ */
+function openDailyPlanFormWindow(opts) {
+  const {
+    planDateLabel,
+    planTotalDolls,
+    planBacklogQty,
+    planNewOrdersQty,
+    productionPlan,
+    fulfillmentCheckpoints,
+    shipHours,
+  } = opts;
+
+  const w = window.open("", "_blank", "noopener,noreferrer");
+  if (!w) {
+    return false;
+  }
+
+  const teamRows = (productionPlan?.rows ?? [])
+    .map(
+      (r) =>
+        `<tr><td>${escapeHtml(r.teamLabel)}</td>${r.cells.map((c) => `<td style="text-align:center">${c.qty}</td>`).join("")}<td style="text-align:right">${r.rowSum}</td></tr>`
+    )
+    .join("");
+
+  let prevC = 0;
+  let prevB = 0;
+  let prevD = 0;
+  let timelineBody = "";
+  for (const row of fulfillmentCheckpoints) {
+    const incC = Math.max(0, row.completed - prevC);
+    const incB = Math.max(0, row.boxed - prevB);
+    const incD = Math.max(0, row.dispatched - prevD);
+    prevC = row.completed;
+    prevB = row.boxed;
+    prevD = row.dispatched;
+
+    const unitBoxes = (n, kind) => {
+      const cap = Math.min(Math.max(0, n), DAILY_PLAN_UNIT_CHK_CAP);
+      let h = '<div class="unit-grid">';
+      for (let i = 1; i <= cap; i++) {
+        h += `<label class="unit-chk"><input type="checkbox" /> <span>${escapeHtml(kind)} ${i}</span></label>`;
+      }
+      if (n > DAILY_PLAN_UNIT_CHK_CAP) {
+        h += `<p class="unit-more">+ ${n - DAILY_PLAN_UNIT_CHK_CAP} additional ${escapeHtml(kind)} units — batch sign-off: ☐</p>`;
+      }
+      if (n === 0) {
+        h += '<p class="muted">—</p>';
+      }
+      h += "</div>";
+      return h;
+    };
+
+    timelineBody += `<tr class="timeline-head"><td colspan="4"><strong>${escapeHtml(row.timeLabel)}</strong> — cumulative targets: completed ${row.completed}, boxed ${row.boxed}, dispatched ${row.dispatched}</td></tr>`;
+    timelineBody += `<tr><td colspan="4" class="sub">Milestone sign-off (entire target through this time)</td></tr>`;
+    timelineBody += `<tr><td>Assembly complete</td><td>Target ${row.completed}</td><td>Increment +${incC}</td><td class="chk">☐ Verified</td></tr>`;
+    timelineBody += `<tr><td>Boxed</td><td>Target ${row.boxed}</td><td>Increment +${incB}</td><td class="chk">☐ Verified</td></tr>`;
+    timelineBody += `<tr><td>Dispatch to shipping partner</td><td>Target ${row.dispatched}</td><td>Increment +${incD}</td><td class="chk">☐ Verified</td></tr>`;
+    timelineBody += `<tr><td colspan="4" class="sub">Per-unit / per-order checks for this window (assembly increments)</td></tr>`;
+    timelineBody += `<tr><td colspan="4">${unitBoxes(incC, "Completed")}</td></tr>`;
+  }
+
+  if (!fulfillmentCheckpoints.length) {
+    timelineBody = `<tr><td colspan="4" class="muted">Set backlog and new-order quantities on Orders &amp; Targets to generate timeline targets, then re-export.</td></tr>`;
+  }
+
+  const defectRows = Array.from({ length: 8 }, () => '<tr><td></td><td></td><td></td><td class="chk">☐</td></tr>').join("");
+
+  const generatedAt = new Date().toLocaleString();
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Daily Plan — ${escapeHtml(planDateLabel)}</title>
+<style>
+  body { font-family: system-ui, "Segoe UI", sans-serif; margin: 0; background: #f8fafc; color: #0f172a; font-size: 11pt; }
+  .bar { background: linear-gradient(135deg, #2d2640, #5c4d8a); color: #fff; padding: 1rem 1.25rem; }
+  .bar h1 { margin: 0; font-size: 1.25rem; font-weight: 800; }
+  .meta { font-size: 0.82rem; opacity: 0.95; margin-top: 0.45rem; line-height: 1.5; }
+  .sheet { margin: 1rem auto; max-width: 900px; padding: 0 1rem 2rem; }
+  h2 { font-size: 1rem; margin: 1.25rem 0 0.5rem; color: #334155; border-bottom: 2px solid #c7d2fe; padding-bottom: 0.25rem; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.88rem; margin-bottom: 0.75rem; background: #fff; box-shadow: 0 1px 4px rgba(15,23,42,0.06); }
+  th, td { border: 1px solid #e2e8f0; padding: 8px 10px; vertical-align: top; }
+  th { background: #f1f5f9; font-weight: 700; text-align: left; }
+  .timeline-head td { background: #eef2ff; font-size: 0.95rem; }
+  .sub { background: #fafafa; font-size: 0.8rem; color: #64748b; font-weight: 600; }
+  .chk { text-align: center; font-size: 1rem; white-space: nowrap; }
+  .unit-grid { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; align-items: center; margin: 0.35rem 0; }
+  .unit-chk { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.8rem; }
+  .unit-more { margin: 0.35rem 0 0; font-size: 0.8rem; color: #64748b; }
+  .muted { color: #64748b; font-style: italic; }
+  .callout { background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0; font-size: 0.88rem; }
+  .callout strong { color: #9a3412; }
+  .toolbar { margin: 1rem 0; }
+  button { font: inherit; padding: 0.5rem 1rem; border-radius: 8px; border: none; background: #5c4d8a; color: #fff; cursor: pointer; font-weight: 700; }
+  button:hover { filter: brightness(1.05); }
+  @media print {
+    body { background: #fff; }
+    .toolbar, button { display: none !important; }
+    .sheet { max-width: none; padding: 0; }
+    table { break-inside: avoid; }
+  }
+</style></head><body>
+<div class="bar"><h1>Daily production &amp; fulfillment plan</h1>
+<div class="meta"><strong>Plan date:</strong> ${escapeHtml(planDateLabel)} · <strong>Generated:</strong> ${escapeHtml(generatedAt)}<br/>
+<strong>Plan total:</strong> ${planTotalDolls.toLocaleString()} dolls (backlog ${planBacklogQty.toLocaleString()} + new orders ${planNewOrdersQty.toLocaleString()}) · <strong>${escapeHtml(String(shipHours))}h</strong> ship program</div></div>
+<div class="sheet">
+<p class="toolbar"><button type="button" onclick="window.print()">Print / Save as PDF</button></p>
+
+<h2>Build allocation — 4 teams × shifts</h2>
+<table><thead><tr><th>Team</th><th>Day shift</th><th>Night shift</th><th style="text-align:right">Row total</th></tr></thead><tbody>${teamRows || '<tr><td colspan="4" class="muted">No team breakdown (set plan quantities).</td></tr>'}</tbody></table>
+
+<h2>Timeline — completed, boxed, dispatch (check as verified for the day)</h2>
+<table><thead><tr><th>Stage / window</th><th>Cumulative target</th><th>This window Δ</th><th style="text-align:center">Sign-off</th></tr></thead><tbody>${timelineBody}</tbody></table>
+
+<div class="callout">
+  <strong>Defects &amp; misbuilds:</strong> Record every defect, wrong assembly, damage, or misbuild on the <strong>Quality / Six Sigma</strong> page (defect log and CAPA).
+  Use the table below for floor notes; transfer to the system the same day.
+</div>
+<h2>Floor notes — defects / misbuilds (also log on Quality / Six Sigma)</h2>
+<table><thead><tr><th>Time</th><th>Order / build ref</th><th>Description</th><th style="text-align:center">☐ Logged on Quality / Six Sigma</th></tr></thead><tbody>${defectRows}</tbody></table>
+
+<p class="muted" style="font-size:0.8rem;margin-top:1.5rem;">OptiDoll Sigma — Daily plan form. Checkboxes are for print/fill; use Adobe Reader or browser print to PDF if needed.</p>
+</div>
+<script>document.querySelector("button")?.focus();</script>
+</body></html>`;
+
+  w.document.write(html);
+  w.document.close();
+  return true;
 }
 
 /** Trim cells, drop blank lines, strip BOM, normalize header names to canonical spelling when case-only differs; pad ragged rows for display. */
@@ -3084,57 +3952,814 @@ function Inventory() {
   );
 }
 
-function Forecasting() {
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const DEFAULT_SEASONALITY_PARAMS = {
+  easter_season_months: [3, 4],
+  easter_season_lift_mult: 1.18,
+  mega_promo_months: [1, 6],
+  mega_promo_multiplier: 3,
+  christmas_season_months: [11, 12],
+  christmas_season_lift_mult: 1.28,
+};
+
+/** 12 bars: multiplier applied by this single event each calendar month (1 = no effect). */
+function SeasonalityFactorBarChart({ values, color = primaryMain, yMax }) {
+  const w = 640;
+  const h = 220;
+  const padX = 36;
+  const padB = 36;
+  const padT = 24;
+  const plotH = h - padT - padB;
+  const plotW = w - padX * 2;
+  const barGap = 4;
+  const barW = (plotW - barGap * 11) / 12;
+  const maxV = yMax ?? Math.max(...values, 1.05);
+  const minV = 1;
+  const rng = Math.max(maxV - minV, 0.01);
+
   return (
-    <Page title="Forecasting Workbench" subtitle="Model demand, seasonality, and supply recommendations in one flow.">
-      <ActionRow actions={["Train Model", "Compare Models", "Edit Seasonality", "Recalculate Forecast"]} />
-      <CardBox title="Forecast Logic">
-        <Typography>
-          Forecasts monthly sales, explodes demand into doll parts, applies Christmas and Easter seasonal lifts,
-          and creates monthly supply order recommendations.
-        </Typography>
-      </CardBox>
-    </Page>
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} role="img" aria-label="Seasonality factor by month">
+        <line x1={padX} y1={padT + plotH} x2={w - padX} y2={padT + plotH} stroke="#94a3b8" />
+        <line x1={padX} y1={padT} x2={padX} y2={padT + plotH} stroke="#94a3b8" />
+        <text x={padX - 4} y={padT + 8} fontSize="10" fill="#64748b" textAnchor="end">
+          {maxV.toFixed(2)}×
+        </text>
+        <text x={padX - 4} y={padT + plotH} fontSize="10" fill="#64748b" textAnchor="end">
+          1×
+        </text>
+        {values.map((v, i) => {
+          const bh = ((v - minV) / rng) * plotH;
+          const x = padX + i * (barW + barGap);
+          const y = padT + plotH - bh;
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW} height={Math.max(bh, 0)} fill={v > 1.001 ? color : "#e2e8f0"} rx={3} />
+              <text x={x + barW / 2} y={h - 8} fontSize="11" fill="#334155" textAnchor="middle">
+                {MONTH_SHORT[i]}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </Box>
   );
 }
 
-function Orders() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [source, setSource] = useState("live");
+function SeasonalityEditDialog({ open, onClose, parametersUsed }) {
+  const [tab, setTab] = useState(0);
+  const p = { ...DEFAULT_SEASONALITY_PARAMS, ...(parametersUsed || {}) };
 
   useEffect(() => {
-    getOrders()
-      .then((data) => {
-        setRows(data.results || data);
+    if (open) setTab(0);
+  }, [open]);
+
+  const configs = useMemo(() => {
+    const pm = Array.isArray(p.mega_promo_months) ? p.mega_promo_months : [1, 6];
+    const megaMult = Number(p.mega_promo_multiplier) || 3;
+    const easterMonths = new Set(Array.isArray(p.easter_season_months) ? p.easter_season_months : [3, 4]);
+    const xmasMonths = new Set(Array.isArray(p.christmas_season_months) ? p.christmas_season_months : [11, 12]);
+    const easterMult = Number(p.easter_season_lift_mult) || 1.18;
+    const xmasMult = Number(p.christmas_season_lift_mult) || 1.28;
+
+    const factorRow = (activeSet, mult) =>
+      MONTH_SHORT.map((_, i) => {
+        const m = i + 1;
+        return activeSet.has(m) ? mult : 1;
+      });
+
+    const mega1Active = new Set(pm.includes(1) ? [1] : []);
+    const mega2Active = new Set(pm.includes(6) ? [6] : []);
+
+    return [
+      {
+        key: "easter",
+        title: "Easter",
+        subtitle: "Spring demand window (configurable months)",
+        months: [...easterMonths].sort((a, b) => a - b),
+        multiplier: easterMult,
+        anchor: "Movable holiday — lift spread across Mar–Apr in parameters",
+        paramRows: [
+          { label: "forecast_parameters.easter_season_months", value: [...easterMonths].sort((a, b) => a - b).join(", ") },
+          { label: "forecast_parameters.easter_season_lift_mult", value: String(easterMult) },
+        ],
+        chartValues: factorRow(easterMonths, easterMult),
+        chartColor: "#ca8a04",
+      },
+      {
+        key: "mega1",
+        title: "Mega Promotion 1",
+        subtitle: "January 1 promotional cycle — triple lift vs baseline",
+        months: pm.includes(1) ? [1] : [],
+        multiplier: megaMult,
+        anchor: "January 1",
+        paramRows: [
+          { label: "mega_promo_months (includes 1)", value: pm.includes(1) ? "Yes" : "No — add 1 to CSV list to activate" },
+          { label: "mega_promo_multiplier", value: String(megaMult) },
+        ],
+        chartValues: factorRow(mega1Active, megaMult),
+        chartColor: "#7c3aed",
+      },
+      {
+        key: "mega2",
+        title: "Mega Promotion 2",
+        subtitle: "June 1 promotional cycle — triple lift vs baseline",
+        months: pm.includes(6) ? [6] : [],
+        multiplier: megaMult,
+        anchor: "June 1",
+        paramRows: [
+          { label: "mega_promo_months (includes 6)", value: pm.includes(6) ? "Yes" : "No — add 6 to CSV list to activate" },
+          { label: "mega_promo_multiplier", value: String(megaMult) },
+        ],
+        chartValues: factorRow(mega2Active, megaMult),
+        chartColor: "#9333ea",
+      },
+      {
+        key: "christmas",
+        title: "Christmas",
+        subtitle: "Peak gift season (Nov–Dec by default)",
+        months: [...xmasMonths].sort((a, b) => a - b),
+        multiplier: xmasMult,
+        anchor: "Black Friday through holiday fulfillment",
+        paramRows: [
+          { label: "forecast_parameters.christmas_season_months", value: [...xmasMonths].sort((a, b) => a - b).join(", ") },
+          { label: "forecast_parameters.christmas_season_lift_mult", value: String(xmasMult) },
+        ],
+        chartValues: factorRow(xmasMonths, xmasMult),
+        chartColor: "#dc2626",
+      },
+    ];
+  }, [p]);
+
+  const cur = configs[tab] ?? configs[0];
+  const chartMax = Math.max(...cur.chartValues, cur.multiplier, 1.05);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="seasonality-edit-title">
+      <DialogTitle id="seasonality-edit-title">Edit Seasonality</DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Review one calendar effect at a time. Values come from active <strong>Forecast parameters</strong> (re-import{" "}
+          <Typography component="span" variant="body2" sx={{ fontFamily: "monospace" }}>
+            forecast_parameters.csv
+          </Typography>{" "}
+          to change). The graph shows the <strong>factor for this event only</strong> (1× = inactive month).
+        </Typography>
+        <Tabs
+          value={tab}
+          onChange={(_, v) => setTab(v)}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}
+        >
+          <Tab label="Easter" id="season-tab-0" aria-controls="season-panel-0" />
+          <Tab label="Mega Promotion 1" id="season-tab-1" aria-controls="season-panel-1" />
+          <Tab label="Mega Promotion 2" id="season-tab-2" aria-controls="season-panel-2" />
+          <Tab label="Christmas" id="season-tab-3" aria-controls="season-panel-3" />
+        </Tabs>
+        <Stack spacing={2} role="tabpanel" id={`season-panel-${tab}`} aria-labelledby={`season-tab-${tab}`}>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              {cur.title}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {cur.subtitle}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+              Planning anchor: {cur.anchor}
+            </Typography>
+          </Box>
+          <Paper variant="outlined" sx={{ p: 2, bgcolor: "#fafbfc" }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Specifications
+            </Typography>
+            <Table size="small">
+              <TableBody>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600, width: "40%" }}>Active months (calendar)</TableCell>
+                  <TableCell>
+                    {cur.months.length ? cur.months.map((m) => `${MONTH_SHORT[m - 1]} (${m})`).join(", ") : "— (none configured)"}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Demand multiplier</TableCell>
+                  <TableCell>
+                    ×{cur.multiplier} on active months (multiplies baseline doll forecast after prior factors in pipeline)
+                  </TableCell>
+                </TableRow>
+                {cur.paramRows.map((row) => (
+                  <TableRow key={row.label}>
+                    <TableCell sx={{ fontWeight: 600, fontSize: "0.8rem" }}>{row.label}</TableCell>
+                    <TableCell sx={{ fontSize: "0.85rem" }}>{row.value}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+          <Box>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              Factor by calendar month (this event only)
+            </Typography>
+            <SeasonalityFactorBarChart values={cur.chartValues} color={cur.chartColor} yMax={chartMax} />
+          </Box>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} variant="contained" color="primary">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function Forecasting() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [source, setSource] = useState("live");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [seasonalityOpen, setSeasonalityOpen] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    getDemandForecastWorkbench()
+      .then((payload) => {
+        setData(payload);
         setSource("live");
       })
       .catch(() => {
-        setRows([
-          ["Today", 42, 40, 39, "93%"],
-          ["This Week", 294, 281, 276, "94%"],
-        ]);
+        setData(null);
         setSource("mock");
       })
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load, reloadKey]);
+
+  const histLabels = useMemo(
+    () => (data?.history ?? []).map((h) => h.year_month?.slice(2) ?? ""),
+    [data]
+  );
+  const histValues = useMemo(() => (data?.history ?? []).map((h) => h.units_sold ?? 0), [data]);
+  const fcLabels = useMemo(
+    () => (data?.forecast ?? []).map((f) => f.year_month?.slice(2) ?? ""),
+    [data]
+  );
+  const fcValues = useMemo(() => (data?.forecast ?? []).map((f) => f.doll_units_forecast ?? 0), [data]);
+
+  const promoMonths = data?.parameters_used?.mega_promo_months ?? [1, 6];
+  const paramMult = data?.parameters_used?.mega_promo_multiplier ?? 3;
+
   return (
-    <Page title="Orders & Daily/Weekly Targets" subtitle="Track output vs goals and ship-rate adherence.">
-      {source === "mock" ? <Alert severity="warning" sx={{ mb: 2 }}>Orders API unavailable. Showing fallback summary.</Alert> : null}
+    <Page
+      title="Forecasting Workbench"
+      subtitle="Predict future demand from completed doll unit sales, seasonal lifts (Christmas, Easter), mega promos (Jan & Jun), and BOM-based order recommendations."
+    >
+      {source === "mock" ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Forecast workbench API unavailable. Start the Django server and run{" "}
+          <code>python manage.py import_doll_sales_from_data</code> (plus seed forecast parameters).
+        </Alert>
+      ) : null}
+      <SeasonalityEditDialog
+        open={seasonalityOpen}
+        onClose={() => setSeasonalityOpen(false)}
+        parametersUsed={data?.parameters_used}
+      />
       <ActionRow
         actions={[
-          { label: "Generate Order Plan", variant: "contained", color: "secondary" },
-          { label: "Export Report", variant: "outlined", color: "secondary" },
+          { label: "Recalculate Forecast", onClick: () => setReloadKey((k) => k + 1) },
+          { label: "Train Model", variant: "outlined" },
+          { label: "Compare Models", variant: "outlined" },
+          { label: "Edit Seasonality", variant: "outlined", onClick: () => setSeasonalityOpen(true) },
+        ]}
+      />
+
+      <CardBox title="Purpose">
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Uses <strong>past complete doll unit sales</strong> (one row per month) to project the next 12 months. Applies{" "}
+          <strong>Christmas</strong> and <strong>Easter</strong> seasonal multipliers, then <strong>two mega promotionals per year</strong>{" "}
+          (months {promoMonths.join(" & ")}, ×{paramMult} sales) aligned with <strong>June 1</strong> and <strong>January 1</strong> planning
+          cycles. Demand is <strong>exploded into parts</strong> via a standard BOM (2 arms, 2 legs, 1 head, hair, 2 eyes, torso, box per doll) with
+          SKU-level split within each part type. <strong>Recommended order qty</strong> = next-month need + safety stock − available inventory.
+        </Typography>
+        {data?.methodology ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {data.methodology}
+          </Typography>
+        ) : null}
+      </CardBox>
+
+      {data?.parameters_used ? (
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", mb: 2, gap: 1 }}>
+          <Chip size="small" color="error" label={`Christmas lift ×${data.parameters_used.christmas_season_lift_mult}`} variant="outlined" />
+          <Chip size="small" color="warning" label={`Easter lift ×${data.parameters_used.easter_season_lift_mult}`} variant="outlined" />
+          <Chip
+            size="small"
+            color="secondary"
+            label={`Mega promo ×${data.parameters_used.mega_promo_multiplier} (months ${(data.parameters_used.mega_promo_months ?? []).join(", ")})`}
+            variant="outlined"
+          />
+          <Chip size="small" label={`Horizon doll units: ${data.horizon_doll_units_total?.toLocaleString?.() ?? data.horizon_doll_units_total}`} />
+        </Stack>
+      ) : null}
+
+      {loading ? (
+        <Skeleton variant="rounded" height={220} sx={{ mb: 2 }} />
+      ) : data?.error === "no_history" ? (
+        <Alert severity="info">{data.message}</Alert>
+      ) : (
+        <Grid container spacing={2.5} sx={{ mb: 2 }}>
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <CardBox title="History — complete doll units sold">
+              <MiniLineChart
+                labels={histLabels}
+                values={histValues.length ? histValues : [0]}
+                color="#2563eb"
+                yLabel="Number of dolls"
+                yValueUnit=" dolls"
+                chipLabel="Actual doll units / month"
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                Last month in file: <strong>{data?.last_actual_month ?? "—"}</strong> · Baseline (avg last 3):{" "}
+                <strong>{data?.baseline_avg_last_3_months ?? "—"}</strong> dolls/mo
+              </Typography>
+            </CardBox>
+          </Grid>
+          <Grid size={{ xs: 12, lg: 6 }}>
+            <CardBox title="Forecast — adjusted doll orders (next 12 months)">
+              <MiniLineChart
+                labels={fcLabels}
+                values={fcValues.length ? fcValues : [0]}
+                color={primaryMain}
+                yLabel="Number of dolls"
+                yValueUnit=" dolls"
+                chipLabel="Forecast doll units / month"
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                Peaks include Nov–Dec Christmas, Mar–Apr Easter, and ×{paramMult} in Jan & Jun promo months.
+              </Typography>
+            </CardBox>
+          </Grid>
+        </Grid>
+      )}
+
+      {!loading && data?.forecast?.length ? (
+        <CardBox title="Forecast detail (multipliers)">
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 320 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Month</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>
+                    Doll units
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>
+                    × Combined
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    Christmas
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    Easter
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>
+                    Mega promo
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.forecast.map((row) => (
+                  <TableRow key={row.year_month} hover>
+                    <TableCell>{row.year_month}</TableCell>
+                    <TableCell align="right">{row.doll_units_forecast}</TableCell>
+                    <TableCell align="right">{row.combined_multiplier}</TableCell>
+                    <TableCell>{row.factors?.christmas_lift ? "Yes" : "—"}</TableCell>
+                    <TableCell>{row.factors?.easter_lift ? "Yes" : "—"}</TableCell>
+                    <TableCell>{row.factors?.mega_promo_jan_or_jun ? `×${paramMult}` : "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </CardBox>
+      ) : null}
+
+      {!loading && data?.parts_plan?.length ? (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
+            Parts plan & recommended orders (next month, per SKU)
+          </Typography>
+          <SimpleTable
+            columns={[
+              "Part type",
+              "SKU",
+              "Part name",
+              "Qty / doll",
+              "Next mo need",
+              "Available",
+              "Safety",
+              "Recommend buy",
+            ]}
+            rows={data.parts_plan.map((p) => [
+              formatPartTypeLabel(p.part_type),
+              p.part_number,
+              p.part_name,
+              String(p.qty_per_doll),
+              p.next_month_part_demand,
+              p.available_qty,
+              p.safety_stock_qty,
+              p.recommended_order_qty,
+            ])}
+            loading={false}
+          />
+        </Box>
+      ) : null}
+    </Page>
+  );
+}
+
+function Orders() {
+  const { operational, operationalLoading, operationalSource, mergedParameterMap } = useOperationalWorkbench();
+
+  const base = operational ?? MOCK_OPERATIONAL;
+  const hasLiveDaily = (operational?.daily_operations?.length ?? 0) > 0;
+  const hasLiveWeekly = (operational?.weekly_operations?.length ?? 0) > 0;
+  const daily = hasLiveDaily ? operational.daily_operations.slice(-14) : MOCK_OPERATIONAL.daily_operations;
+  const weekly = hasLiveWeekly ? operational.weekly_operations.slice(-8) : MOCK_OPERATIONAL.weekly_operations;
+
+  const summary = base.orders_summary ?? MOCK_OPERATIONAL.orders_summary;
+  const shipHours = mergedParameterMap.ship_within_hours ?? summary.ship_within_hours ?? 48;
+  const shipTarget = mergedParameterMap.on_time_ship_target ?? summary.on_time_ship_target ?? 0.98;
+  const rate = summary.on_time_48h_rate ?? 0;
+  const keepingUp = rate >= shipTarget - 0.005;
+
+  const dailyLabels = useMemo(() => daily.map((d) => d.target_date?.slice(5) ?? ""), [daily]);
+  const shipActual = useMemo(() => daily.map((d) => d.actual_shipped ?? 0), [daily]);
+  const shipTargetSeries = useMemo(() => daily.map((d) => d.target_shipped ?? 0), [daily]);
+  const backlogSeries = useMemo(() => daily.map((d) => d.backlog_qty ?? 0), [daily]);
+
+  const weeklyRows = useMemo(
+    () =>
+      weekly.map((w) => {
+        const ach = w.target_shipped ? Math.round((100 * (w.actual_shipped || 0)) / w.target_shipped) : "—";
+        const otr = w.on_time_ship_rate != null ? `${(Number(w.on_time_ship_rate) * 100).toFixed(1)}%` : "—";
+        return [
+          `${w.week_start?.slice(5) ?? ""} – ${w.week_end?.slice(5) ?? ""}`,
+          w.target_orders ?? "—",
+          w.actual_orders ?? "—",
+          w.actual_assembled ?? "—",
+          w.actual_shipped ?? "—",
+          `${ach}%`,
+          otr,
+          w.ending_backlog ?? "—",
+        ];
+      }),
+    [weekly]
+  );
+
+  const defaultPlanBacklog = Number(summary.latest_backlog) || 0;
+  const defaultPlanNewOrders = Number(daily[daily.length - 1]?.actual_orders) || 0;
+  const [planBacklogStr, setPlanBacklogStr] = useState("");
+  const [planNewOrdersStr, setPlanNewOrdersStr] = useState("");
+  const [planGeneratedAt, setPlanGeneratedAt] = useState(null);
+
+  useEffect(() => {
+    setPlanBacklogStr(String(defaultPlanBacklog));
+    setPlanNewOrdersStr(String(defaultPlanNewOrders));
+  }, [defaultPlanBacklog, defaultPlanNewOrders]);
+
+  const planBacklogQty = Math.max(0, Math.round(parseFloat(planBacklogStr) || 0));
+  const planNewOrdersQty = Math.max(0, Math.round(parseFloat(planNewOrdersStr) || 0));
+  const planTotalDolls = planBacklogQty + planNewOrdersQty;
+  const productionPlan = useMemo(() => buildEvenTeamShiftPlan(planTotalDolls), [planTotalDolls]);
+  const fulfillmentCheckpoints = useMemo(() => buildFulfillmentCheckpointRows(planTotalDolls), [planTotalDolls]);
+  const maxCellQty = useMemo(
+    () => Math.max(1, ...productionPlan.rows.flatMap((r) => r.cells.map((c) => c.qty))),
+    [productionPlan.rows]
+  );
+  const maxCheckpointQty = useMemo(
+    () => Math.max(1, planTotalDolls, ...fulfillmentCheckpoints.flatMap((r) => [r.completed, r.boxed, r.dispatched])),
+    [fulfillmentCheckpoints, planTotalDolls]
+  );
+
+  const regenerateProductionPlan = () => {
+    setPlanGeneratedAt(new Date());
+  };
+
+  const planDateLabel = daily.length ? daily[daily.length - 1]?.target_date ?? new Date().toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+
+  const exportDailyPlan = () => {
+    const ok = openDailyPlanFormWindow({
+      planDateLabel,
+      planTotalDolls,
+      planBacklogQty,
+      planNewOrdersQty,
+      productionPlan,
+      fulfillmentCheckpoints,
+      shipHours,
+    });
+    if (!ok) {
+      window.alert("Could not open the print window. Allow pop-ups for this site and try again.");
+    }
+  };
+
+  return (
+    <Page
+      title="Orders & Targets"
+      subtitle={
+        base.purpose?.orders ??
+        "Track daily and weekly performance: orders received, assembled, shipped, 48-hour ship goal, backlog, and whether operations are keeping up."
+      }
+    >
+      {operationalSource === "mock" ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Operational workbench API unavailable. Showing embedded demo series; connect Django and run seed import for live daily/weekly targets.
+        </Alert>
+      ) : null}
+      {operationalSource === "live" && !operationalLoading && !hasLiveDaily ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          No daily targets in the database yet. Import seed data (includes <code>daily_targets.csv</code>) to populate charts; demo series is shown until then.
+        </Alert>
+      ) : null}
+
+      <CardBox title="Purpose">
+        <Typography variant="body2" color="text.secondary">
+          Shows orders received, assembled, and shipped; tracks the {shipHours}-hour shipping goal against Settings; compares daily and weekly targets to
+          actuals; monitors backlog.{" "}
+          <strong>{keepingUp ? "Operations are at or above the ship target." : "Operations are slightly below the ship target — review capacity and backlog."}</strong>
+        </Typography>
+      </CardBox>
+
+      <Grid container spacing={2} sx={{ mb: 2, mt: 0.5 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title={`${shipHours}h ship rate`}
+            value={`${(rate * 100).toFixed(1)}%`}
+            subtitle={`Target: ${(shipTarget * 100).toFixed(0)}% (Settings)`}
+            color={rate >= shipTarget ? "success" : "warning"}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard title="Latest backlog" value={summary.latest_backlog ?? "—"} subtitle="End of last reported day" color="primary" />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard title="Orders in system" value={summary.total_orders ?? "—"} subtitle={`Shipped: ${summary.shipped_orders ?? "—"}`} color="primary" />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Weekly ship attainment"
+            value={weekly.length ? `${Math.round((100 * (weekly[weekly.length - 1].actual_shipped || 0)) / Math.max(weekly[weekly.length - 1].target_shipped || 1, 1))}%` : "—"}
+            subtitle="Most recent week vs ship target"
+            color="primary"
+          />
+        </Grid>
+      </Grid>
+
+      <ActionRow
+        actions={[
+          { label: "Generate Order Plan", variant: "contained", color: "secondary", onClick: regenerateProductionPlan },
+          { label: "Export Daily Plan", variant: "outlined", color: "secondary", onClick: exportDailyPlan },
           { label: "Approve Order", variant: "contained", color: "success" },
           { label: "Review Risk", variant: "contained", color: "warning" },
         ]}
       />
-      <SimpleTable
-        columns={["Period", "Target Orders", "Assembled", "Shipped", "Achievement"]}
-        rows={Array.isArray(rows[0]) ? rows : rows.slice(0, 10).map((o) => [o.order_number, "-", "-", o.status, "-"])}
-        loading={loading}
-      />
+
+      <CardBox title="Production build plan — 4 teams × Day / Night shifts">
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Doll builds to clear <strong>backlog</strong> and cover <strong>new orders</strong> are split across four production teams and two shifts per team.
+          Quantities use an <strong>even distribution</strong>: each team-shift block gets ⌊total÷8⌋ or ⌈total÷8⌉ dolls so no block differs by more than one unit from any other.
+        </Typography>
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="Backlog dolls to clear"
+              type="number"
+              inputProps={{ min: 0, step: 1 }}
+              value={planBacklogStr}
+              onChange={(e) => setPlanBacklogStr(e.target.value)}
+              helperText={`Default: latest backlog (${defaultPlanBacklog})`}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              fullWidth
+              size="small"
+              label="New order dolls (intake to fulfill)"
+              type="number"
+              inputProps={{ min: 0, step: 1 }}
+              value={planNewOrdersStr}
+              onChange={(e) => setPlanNewOrdersStr(e.target.value)}
+              helperText={`Default: most recent day orders received (${defaultPlanNewOrders})`}
+            />
+          </Grid>
+        </Grid>
+        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+          <Chip color="secondary" label={`Total dolls in plan: ${planTotalDolls.toLocaleString()}`} />
+          <Chip variant="outlined" label={`Base per block: ${productionPlan.base} · +1 blocks: ${productionPlan.remainder}`} />
+          {planGeneratedAt ? (
+            <Typography variant="caption" color="text.secondary">
+              Plan refreshed {planGeneratedAt.toLocaleTimeString()}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              Click Generate Order Plan to timestamp a refresh.
+            </Typography>
+          )}
+        </Stack>
+        {planTotalDolls === 0 ? (
+          <Alert severity="info">Enter a backlog and/or new-order quantity above to see the team × shift grid.</Alert>
+        ) : (
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 700 }}>Production team</TableCell>
+                  {PRODUCTION_SHIFTS.map((s) => (
+                    <TableCell key={s.key} align="center" sx={{ fontWeight: 700 }}>
+                      {s.label}
+                    </TableCell>
+                  ))}
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>
+                    Row total
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {productionPlan.rows.map((row) => (
+                  <TableRow key={row.teamLabel}>
+                    <TableCell>{row.teamLabel}</TableCell>
+                    {row.cells.map((cell) => (
+                      <TableCell key={cell.shiftKey} align="center">
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {cell.qty.toLocaleString()}
+                        </Typography>
+                        <Box sx={{ height: 6, borderRadius: 1, bgcolor: "#e2e8f0", mt: 0.75, maxWidth: 120, mx: "auto" }}>
+                          <Box
+                            sx={{
+                              height: "100%",
+                              width: `${(cell.qty / maxCellQty) * 100}%`,
+                              bgcolor: primaryMain,
+                              borderRadius: 1,
+                              minWidth: cell.qty > 0 ? 4 : 0,
+                            }}
+                          />
+                        </Box>
+                      </TableCell>
+                    ))}
+                    <TableCell align="right">{row.rowSum.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow sx={{ bgcolor: "rgba(133, 116, 196, 0.08)" }}>
+                  <TableCell sx={{ fontWeight: 700 }}>Shift totals</TableCell>
+                  {productionPlan.shiftColumnTotals.map((t, i) => (
+                    <TableCell key={PRODUCTION_SHIFTS[i].key} align="center" sx={{ fontWeight: 700 }}>
+                      {t.toLocaleString()}
+                    </TableCell>
+                  ))}
+                  <TableCell align="right" sx={{ fontWeight: 700 }}>
+                    {planTotalDolls.toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+
+        {planTotalDolls > 0 ? (
+          <>
+            <Divider sx={{ my: 3 }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 0.5 }}>
+              Intra-day fulfillment — completed, boxed, dispatch to shipping partner
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Cumulative doll targets by wall-clock time for the same plan total ({planTotalDolls.toLocaleString()} dolls). Schedule assumes a{" "}
+              <strong>8:00 AM–5:00 PM</strong> operating day with steady output. Boxing trails assembly and handoff to the shipping partner trails boxing
+              (short pipeline lag so counts stay realistic through mid-day).
+            </Typography>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Timestamp</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Dolls completed (assembly)
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Dolls boxed
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Dolls dispatched to shipping partner
+                    </TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>
+                      Day progress
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {fulfillmentCheckpoints.map((row) => (
+                    <TableRow key={row.timeLabel}>
+                      <TableCell sx={{ fontWeight: 600 }}>{row.timeLabel}</TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {row.completed.toLocaleString()}
+                        </Typography>
+                        <Box sx={{ height: 4, borderRadius: 1, bgcolor: "#e2e8f0", mt: 0.5, maxWidth: 100, ml: "auto" }}>
+                          <Box sx={{ width: `${(row.completed / maxCheckpointQty) * 100}%`, height: "100%", bgcolor: "#2563eb", borderRadius: 1 }} />
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {row.boxed.toLocaleString()}
+                        </Typography>
+                        <Box sx={{ height: 4, borderRadius: 1, bgcolor: "#e2e8f0", mt: 0.5, maxWidth: 100, ml: "auto" }}>
+                          <Box sx={{ width: `${(row.boxed / maxCheckpointQty) * 100}%`, height: "100%", bgcolor: "#7c3aed", borderRadius: 1 }} />
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {row.dispatched.toLocaleString()}
+                        </Typography>
+                        <Box sx={{ height: 4, borderRadius: 1, bgcolor: "#e2e8f0", mt: 0.5, maxWidth: 100, ml: "auto" }}>
+                          <Box sx={{ width: `${(row.dispatched / maxCheckpointQty) * 100}%`, height: "100%", bgcolor: "#047857", borderRadius: 1 }} />
+                        </Box>
+                      </TableCell>
+                      <TableCell align="center">{row.dayProgressPct}%</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow sx={{ bgcolor: "rgba(37, 99, 235, 0.06)" }}>
+                    <TableCell sx={{ fontWeight: 700 }}>End of day (plan)</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      {planTotalDolls.toLocaleString()}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      {planTotalDolls.toLocaleString()}
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      {planTotalDolls.toLocaleString()}
+                    </TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>
+                      100%
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        ) : null}
+      </CardBox>
+
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <CardBox title="Daily shipped vs target (last 14 days)">
+            <MiniLineChart
+              labels={dailyLabels.length ? dailyLabels : ["—"]}
+              values={shipActual.length ? shipActual : [0]}
+              color="#2563eb"
+              yLabel="Units"
+              yValueUnit=" units"
+              chipLabel="Actual shipped / day"
+            />
+          </CardBox>
+        </Grid>
+        <Grid size={{ xs: 12, lg: 6 }}>
+          <CardBox title="Daily ship target (plan)">
+            <MiniLineChart
+              labels={dailyLabels.length ? dailyLabels : ["—"]}
+              values={shipTargetSeries.length ? shipTargetSeries : [0]}
+              color="#64748b"
+              yLabel="Units"
+              yValueUnit=" units"
+              chipLabel="Target shipped / day"
+            />
+          </CardBox>
+        </Grid>
+        <Grid size={{ xs: 12 }}>
+          <CardBox title="Backlog trend (end of day)">
+            <MiniLineChart
+              labels={dailyLabels.length ? dailyLabels : ["—"]}
+              values={backlogSeries.length ? backlogSeries : [0]}
+              color="#b45309"
+              yLabel="Backlog units"
+              yValueUnit=" units"
+              chipLabel="Backlog EOD"
+            />
+          </CardBox>
+        </Grid>
+      </Grid>
+
+      <CardBox title="Weekly performance vs targets">
+        <SimpleTable
+          columns={["Week", "Target orders", "Received", "Assembled", "Shipped (48h window)", "Ship attainment", "On-time rate", "Ending backlog"]}
+          rows={weeklyRows}
+          loading={operationalLoading}
+        />
+      </CardBox>
     </Page>
   );
 }
@@ -3357,84 +4982,506 @@ function Suppliers() {
   );
 }
 
+function LogDefectDialog({ open, onClose, defectTypes, onSaved }) {
+  const [defectTypeId, setDefectTypeId] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [notes, setNotes] = useState("");
+  const [defectDate, setDefectDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [severity, setSeverity] = useState("minor");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    if (defectTypes?.length) {
+      setDefectTypeId((prev) => prev || String(defectTypes[0].id));
+    }
+  }, [open, defectTypes]);
+
+  const save = async () => {
+    if (!defectTypes?.length) {
+      setError("No defect types available from the server. Import seed data or add defect types in admin.");
+      return;
+    }
+    if (!defectTypeId) {
+      setError("Select a defect type.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await createDefectEvent({
+        defect_date: defectDate,
+        defect_type: Number(defectTypeId),
+        quantity: Math.max(1, parseInt(quantity, 10) || 1),
+        severity,
+        notes: notes.trim() || "",
+      });
+      onSaved?.();
+      onClose();
+    } catch (e) {
+      const detail = e?.response?.data;
+      const msg =
+        typeof detail === "string"
+          ? detail
+          : detail?.detail
+            ? String(detail.detail)
+            : Array.isArray(detail)
+              ? JSON.stringify(detail)
+              : detail
+                ? JSON.stringify(detail)
+                : e?.message;
+      setError(msg || "Could not save defect.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Log defect</DialogTitle>
+      <DialogContent>
+        {error ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        ) : null}
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel id="defect-type-lbl">Defect type</InputLabel>
+            <Select
+              labelId="defect-type-lbl"
+              label="Defect type"
+              value={defectTypeId}
+              onChange={(e) => setDefectTypeId(e.target.value)}
+            >
+              {(defectTypes ?? []).map((dt) => (
+                <MenuItem key={dt.id} value={String(dt.id)}>
+                  {dt.defect_name} ({dt.defect_code})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            size="small"
+            label="Defect date"
+            type="date"
+            value={defectDate}
+            onChange={(e) => setDefectDate(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }}
+            fullWidth
+          />
+          <TextField size="small" label="Quantity" type="number" inputProps={{ min: 1 }} value={quantity} onChange={(e) => setQuantity(e.target.value)} fullWidth />
+          <FormControl fullWidth size="small">
+            <InputLabel id="sev-lbl">Severity</InputLabel>
+            <Select labelId="sev-lbl" label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+              <MenuItem value="minor">Minor</MenuItem>
+              <MenuItem value="major">Major</MenuItem>
+              <MenuItem value="critical">Critical</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField size="small" label="Notes (misbuild details, order ref, etc.)" multiline minRows={3} value={notes} onChange={(e) => setNotes(e.target.value)} fullWidth />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" onClick={save} disabled={saving || !(defectTypes?.length > 0)}>
+          {saving ? "Saving…" : "Save to defect log"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function CapaCaseDialog({ open, onClose, onSaved }) {
+  const [title, setTitle] = useState("");
+  const [problem, setProblem] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setTitle("");
+    setProblem("");
+    setDueDate("");
+  }, [open]);
+
+  const save = async () => {
+    if (!title.trim() || !problem.trim()) {
+      setError("Title and problem statement are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const opened_date = new Date().toISOString().slice(0, 10);
+    const capa_number = `WEB-${Date.now()}`;
+    try {
+      const payload = {
+        capa_number,
+        opened_date,
+        title: title.trim(),
+        problem_statement: problem.trim(),
+        status: "open",
+      };
+      if (dueDate) payload.due_date = dueDate;
+      await createCapaCase(payload);
+      onSaved?.();
+      onClose();
+    } catch (e) {
+      const detail = e?.response?.data;
+      const msg = typeof detail === "string" ? detail : detail ? JSON.stringify(detail) : e?.message;
+      setError(msg || "Could not create CAPA.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Open CAPA case</DialogTitle>
+      <DialogContent>
+        {error ? (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        ) : null}
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            Creates a corrective/preventive action record via the API. Follow up in the CAPA tracker below.
+          </Typography>
+          <TextField size="small" label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth required />
+          <TextField
+            size="small"
+            label="Problem statement"
+            multiline
+            minRows={4}
+            value={problem}
+            onChange={(e) => setProblem(e.target.value)}
+            fullWidth
+            required
+          />
+          <TextField size="small" label="Due date (optional)" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} fullWidth />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="contained" color="secondary" onClick={save} disabled={saving}>
+          {saving ? "Saving…" : "Create CAPA"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function Quality() {
   const [defects, setDefects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [source, setSource] = useState("live");
+  const [defectsLoading, setDefectsLoading] = useState(true);
+  const [defectsSource, setDefectsSource] = useState("live");
+  const [logDefectOpen, setLogDefectOpen] = useState(false);
+  const [capaOpen, setCapaOpen] = useState(false);
+  const [capaFilter, setCapaFilter] = useState("all");
+  const [spcSnack, setSpcSnack] = useState(false);
+  const paretoRef = useRef(null);
+  const capaRef = useRef(null);
+  const { operational, operationalLoading, operationalSource, mergedParameterMap, reloadOperational } = useOperationalWorkbench();
+
+  const refreshDefects = useCallback(() => {
+    setDefectsLoading(true);
+    getDefects()
+      .then((data) => {
+        setDefects(data.results || data);
+        setDefectsSource("live");
+      })
+      .catch(() => {
+        setDefects([]);
+        setDefectsSource("mock");
+      })
+      .finally(() => setDefectsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    refreshDefects();
+  }, [refreshDefects]);
+
+  const afterMutation = useCallback(() => {
+    reloadOperational();
+    refreshDefects();
+  }, [reloadOperational, refreshDefects]);
 
   const sortedDefects = useMemo(() => {
     if (!defects.length || Array.isArray(defects[0])) return defects;
     return [...defects].sort(compareDefectRecords);
   }, [defects]);
 
-  useEffect(() => {
-    getDefects()
-      .then((data) => {
-        setDefects(data.results || data);
-        setSource("live");
-      })
-      .catch(() => {
-        setDefects([
-          ["Wrong Assembly", 18, "Wrong part in bin"],
-          ["Damaged Return", 9, "Shipping damage"],
-          ["Missing Component", 7, "Picking error"],
-        ]);
-        setSource("mock");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+  const q = operational?.quality ?? MOCK_OPERATIONAL.quality;
+  const defectTypes = q.defect_types ?? MOCK_OPERATIONAL.quality.defect_types ?? [];
+  const copqBreakdown = q.copq_breakdown ?? MOCK_OPERATIONAL.quality.copq_breakdown;
+  const capaSummary = q.capa_summary ?? MOCK_OPERATIONAL.quality.capa_summary;
+  const defectTrend = (q.defect_monthly_trend ?? MOCK_OPERATIONAL.quality.defect_monthly_trend ?? []).slice(-12);
+  const dpmoBasis = q.dpmo_basis ?? MOCK_OPERATIONAL.quality.dpmo_basis;
+
+  const paretoLabels = useMemo(() => (q.pareto ?? []).map((p) => p.label), [q.pareto]);
+  const paretoValues = useMemo(() => (q.pareto ?? []).map((p) => p.count), [q.pareto]);
+  const paretoThreshold = paretoValues.length ? Math.max(10, Math.round(0.35 * Math.max(...paretoValues))) : 10;
+
+  const rootLabels = useMemo(() => (q.root_causes ?? []).map((r) => r.label), [q.root_causes]);
+  const rootValues = useMemo(() => (q.root_causes ?? []).map((r) => r.count), [q.root_causes]);
+
+  const trendLabels = useMemo(() => defectTrend.map((t) => t.year_month?.replace(/^(\d{4})-(\d{2})$/, "$2/$1") ?? ""), [defectTrend]);
+  const trendValues = useMemo(() => defectTrend.map((t) => t.defect_units ?? 0), [defectTrend]);
+
+  const dpmoTarget = mergedParameterMap.dpmo_target ?? q.dpmo_target ?? 3400;
+  const rtyTarget = mergedParameterMap.target_rty ?? q.rty_target ?? 0.95;
+  const confTarget = mergedParameterMap.configuration_accuracy_target ?? q.configuration_accuracy_target ?? 0.99;
+  const cpkTarget = mergedParameterMap.min_cpk ?? q.cpk_target ?? 1.33;
+
+  const capaList = operational?.capa?.length ? operational.capa : MOCK_OPERATIONAL.capa;
+  const filteredCapa = useMemo(() => {
+    if (capaFilter === "all") return capaList;
+    return capaList.filter((c) => (c.status || "").toLowerCase() === capaFilter);
+  }, [capaList, capaFilter]);
+
+  const dpmoVal = Math.max(1, Math.round(q.dpmo ?? 0));
+  const dpmoVsTargetPct = Math.min(100, Math.round((dpmoTarget / dpmoVal) * 100));
+
+  const copqLines = copqBreakdown?.quality_cost_lines ?? {};
+  const copqRows = [
+    ["Scrap", `$${Math.round(copqLines.scrap ?? 0).toLocaleString()}`],
+    ["Rework", `$${Math.round(copqLines.rework ?? 0).toLocaleString()}`],
+    ["Returns (quality cost records)", `$${Math.round(copqLines.return_cost ?? 0).toLocaleString()}`],
+    ["Warranty", `$${Math.round(copqLines.warranty ?? 0).toLocaleString()}`],
+    ["Expedite", `$${Math.round(copqLines.expedite ?? 0).toLocaleString()}`],
+    ["Subtotal (quality cost table)", `$${Math.round(copqBreakdown?.quality_costs_recorded ?? 0).toLocaleString()}`],
+    ["Returns / rework / refunds (return events)", `$${Math.round(copqBreakdown?.returns_and_rework_charges ?? 0).toLocaleString()}`],
+    ["Combined (90 days)", `$${Math.round(copqBreakdown?.combined_90d ?? q.copq_total_90d ?? 0).toLocaleString()}`],
+  ];
+
+  const scrollToPareto = () => paretoRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollToCapa = () => capaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
-    <Page title="Quality / Six Sigma" subtitle="Prioritize defect drivers and keep process capability on target.">
-      {source === "mock" ? <Alert severity="warning" sx={{ mb: 2 }}>Defects API unavailable. Showing fallback defects.</Alert> : null}
-      <ActionRow actions={["Log Defect", "Open CAPA Case", "View Pareto Chart", "Rerun SPC"]} />
+    <Page
+      title="Quality / Six Sigma"
+      subtitle={
+        operational?.purpose?.quality ??
+        "Monitor and improve product quality. Tracks defects (wrong assembly, damage, etc.), calculates metrics like DPMO and yield, shows root causes of problems, manages CAPA (corrective actions), and tracks cost of poor quality. Helps reduce mistakes and improve consistency."
+      }
+    >
+      <LogDefectDialog open={logDefectOpen} onClose={() => setLogDefectOpen(false)} defectTypes={defectTypes} onSaved={afterMutation} />
+      <CapaCaseDialog open={capaOpen} onClose={() => setCapaOpen(false)} onSaved={afterMutation} />
+      <Snackbar open={spcSnack} autoHideDuration={2800} onClose={() => setSpcSnack(false)} message="SPC refresh queued — metrics recalculated from latest operational snapshot." />
+
+      {operationalSource === "mock" ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Operational workbench API unavailable. Showing embedded demo quality data; Log defect / CAPA still call the API when the server is up.
+        </Alert>
+      ) : null}
+      {defectsSource === "mock" ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Defects API unreachable — event log may be empty. Charts and pareto still reflect the operational workbench (and seed/CSV fallbacks on the server).
+        </Alert>
+      ) : null}
+
+      <CardBox title="Purpose">
+        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
+          {`Monitor and improve product quality.
+
+Tracks defects (wrong assembly, damage, etc.).
+Calculates metrics like DPMO and yield.
+Shows root causes of problems.
+Manages CAPA (corrective actions).
+Tracks cost of poor quality.
+
+Helps reduce mistakes and improve consistency.`}
+        </Typography>
+      </CardBox>
+
+      <Grid container spacing={2} sx={{ mb: 1 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard title="DPMO (est.)" value={Math.round(q.dpmo ?? 0).toLocaleString()} subtitle={`Target ≤ ${Math.round(dpmoTarget).toLocaleString()}`} color="warning" />
+          <Box sx={{ mt: 1, px: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              Closer to 100% = nearer DPMO target (lower DPMO is better)
+            </Typography>
+            <LinearProgress variant="determinate" value={dpmoVsTargetPct} sx={{ mt: 0.5, height: 8, borderRadius: 1 }} color={dpmoVal <= dpmoTarget ? "success" : "warning"} />
+          </Box>
+          {dpmoBasis ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+              Basis: {dpmoBasis.defect_units} defect units ÷ ({dpmoBasis.units_for_dpmo ?? dpmoBasis.order_count} doll-unit basis ×{" "}
+              {dpmoBasis.opportunities_per_unit} opp)
+              {dpmoBasis.recent_throughput_units != null
+                ? ` · last-14d throughput sum ${Number(dpmoBasis.recent_throughput_units).toLocaleString()}`
+                : ""}
+            </Typography>
+          ) : null}
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Process yield"
+            value={`${((q.process_yield ?? 0) * 100).toFixed(1)}%`}
+            subtitle={`RTY target ${(rtyTarget * 100).toFixed(0)}%`}
+            color="primary"
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Config accuracy"
+            value={`${((q.configuration_accuracy ?? 0) * 100).toFixed(1)}%`}
+            subtitle={`Target ${(confTarget * 100).toFixed(0)}%`}
+            color="success"
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <KpiCard
+            title="Cpk (reported)"
+            value={Number(q.cpk ?? 0).toFixed(2)}
+            subtitle={`Min ${Number(cpkTarget).toFixed(2)} (Settings)`}
+            color="warning"
+          />
+        </Grid>
+      </Grid>
+
+      {capaSummary ? (
+        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}>
+          <Chip size="small" label={`CAPA open: ${capaSummary.open ?? 0}`} color="warning" variant="outlined" />
+          <Chip size="small" label={`In progress: ${capaSummary.in_progress ?? 0}`} color="primary" variant="outlined" />
+          <Chip size="small" label={`Closed: ${capaSummary.closed ?? 0}`} variant="outlined" />
+          <Chip size="small" label={`Total: ${capaSummary.total ?? 0}`} />
+        </Stack>
+      ) : null}
+
+      <ActionRow
+        actions={[
+          { label: "Log Defect", onClick: () => setLogDefectOpen(true) },
+          { label: "Open CAPA Case", variant: "contained", color: "secondary", onClick: () => setCapaOpen(true) },
+          { label: "View Pareto Chart", variant: "outlined", color: "secondary", onClick: scrollToPareto },
+          { label: "Rerun SPC", variant: "outlined", onClick: () => { reloadOperational(); setSpcSnack(true); } },
+        ]}
+      />
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <CardBox title="Defect Pareto">
-            <MiniBarChart
-              labels={["Wrong Assembly", "Damaged Return", "Missing Part", "Cosmetic", "Late Shipment"]}
-              values={[18, 9, 7, 6, 4]}
-              color="#ea580c"
-              yLabel="Defects"
-              threshold={10}
-            />
+          <Box ref={paretoRef}>
+            <CardBox title="Defect Pareto (wrong assembly, damage, and other types)">
+              {paretoLabels.length ? (
+                <MiniBarChart labels={paretoLabels} values={paretoValues} color="#ea580c" yLabel="Defect units (rolled up by type)" threshold={paretoThreshold} />
+              ) : (
+                <Typography variant="body2" color="text.secondary">No pareto data.</Typography>
+              )}
+            </CardBox>
+          </Box>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <CardBox title="Root causes of problems">
+            {rootLabels.length ? (
+              <MiniBarChart labels={rootLabels} values={rootValues} color="#7c3aed" yLabel="Defect units by root cause" threshold={null} />
+            ) : (
+              <Typography variant="body2" color="text.secondary">No root-cause attribution.</Typography>
+            )}
           </CardBox>
         </Grid>
 
         <Grid size={{ xs: 12, md: 6 }}>
-          <CardBox title="Six Sigma Controls">
+          <CardBox title="Defect trend (monthly units)">
+            {trendLabels.length ? (
+              <MiniLineChart
+                labels={trendLabels}
+                values={trendValues.length ? trendValues : [0]}
+                color="#dc2626"
+                yLabel="Defect units"
+                yValueUnit=" units"
+                chipLabel="Monthly defect units"
+              />
+            ) : (
+              <Typography variant="body2" color="text.secondary">No monthly defect history yet.</Typography>
+            )}
+          </CardBox>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <CardBox title="Six Sigma metrics vs Settings targets">
             <SimpleTable
-              columns={["Metric", "Current", "Target"]}
+              columns={["Metric", "Current", "Target (Settings)"]}
               rows={[
-                ["DPMO", "3,900", "3,400"],
-                ["RTY", "94.8%", "95%"],
-                ["Configuration Accuracy", "98.2%", "99%"],
-                ["Cpk", "1.21", "1.33"],
+                ["DPMO", Math.round(q.dpmo ?? 0).toLocaleString(), Math.round(dpmoTarget).toLocaleString()],
+                ["Yield / RTY", `${((q.process_yield ?? 0) * 100).toFixed(1)}%`, `${(rtyTarget * 100).toFixed(0)}%`],
+                ["Configuration accuracy", `${((q.configuration_accuracy ?? 0) * 100).toFixed(1)}%`, `${(confTarget * 100).toFixed(0)}%`],
+                ["Cpk", Number(q.cpk ?? 0).toFixed(2), Number(cpkTarget).toFixed(2)],
               ]}
             />
           </CardBox>
         </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <CardBox title="Cost of poor quality (90 days)">
+            <Typography variant="h5" sx={{ fontWeight: 800 }}>
+              ${Math.round(q.copq_total_90d ?? copqBreakdown?.combined_90d ?? 0).toLocaleString()}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+              Track scrap, rework, returns, warranty, and expedite from quality-cost records plus return-event charges. Same window as the operational workbench.
+            </Typography>
+            <SimpleTable columns={["COPQ component", "Amount (90d)"]} rows={copqRows} loading={operationalLoading} />
+          </CardBox>
+        </Grid>
       </Grid>
 
+      <Box sx={{ mt: 2 }} ref={capaRef}>
+        <CardBox title="CAPA tracker (corrective actions)">
+          <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}>
+            {["all", "open", "in_progress", "closed"].map((f) => (
+              <Chip
+                key={f}
+                size="small"
+                label={f === "all" ? "All" : f.replace("_", " ")}
+                onClick={() => setCapaFilter(f)}
+                color={capaFilter === f ? "secondary" : "default"}
+                variant={capaFilter === f ? "filled" : "outlined"}
+              />
+            ))}
+          </Stack>
+          <SimpleTable
+            columns={["CAPA #", "Title", "Status", "Opened", "Due", "Effective"]}
+            rows={filteredCapa.map((c) => [
+              c.capa_number,
+              c.title,
+              c.status,
+              c.opened_date ?? "—",
+              c.due_date ?? "—",
+              c.effectiveness_verified ? "Yes" : "No",
+            ])}
+            loading={operationalLoading}
+          />
+        </CardBox>
+      </Box>
+
       <Box sx={{ mt: 2 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
+          Defect event log (API) — misbuilds & damage
+        </Typography>
         <SimpleTable
           columns={["Body part", "Part", "Defect type", "Count", "Notes"]}
           rows={
-            Array.isArray(sortedDefects[0])
-              ? sortedDefects
-              : sortedDefects.map((d) => {
-                  const partName = d.part_detail?.part_name ?? "—";
-                  return [
-                    formatPartTypeLabel(d.part_detail?.part_type ?? (partName !== "—" ? inferPartTypeFromName(partName) : null)),
-                    partName,
-                    d.defect_type_detail?.defect_name ?? (Number.isFinite(Number(d.defect_type)) ? `Defect #${d.defect_type}` : String(d.defect_type ?? "Defect")),
-                    d.quantity || 1,
-                    d.notes || "—",
-                  ];
-                })
+            !sortedDefects.length
+              ? []
+              : Array.isArray(sortedDefects[0])
+                ? sortedDefects
+                : sortedDefects.map((d) => {
+                    const partName = d.part_detail?.part_name ?? "—";
+                    return [
+                      formatPartTypeLabel(d.part_detail?.part_type ?? (partName !== "—" ? inferPartTypeFromName(partName) : null)),
+                      partName,
+                      d.defect_type_detail?.defect_name ??
+                        (Number.isFinite(Number(d.defect_type)) ? `Defect #${d.defect_type}` : String(d.defect_type ?? "Defect")),
+                      d.quantity || 1,
+                      d.notes || "—",
+                    ];
+                  })
           }
-          loading={loading}
+          loading={defectsLoading}
         />
       </Box>
     </Page>
@@ -3449,10 +5496,32 @@ function formatForecastParameterLabel(parameterName) {
     .join(" ");
 }
 
+const SETTINGS_TUNABLE_KEYS = [
+  { key: "on_time_ship_target", label: "On-time ship target (48h window)", hint: "Compared on Orders & Targets" },
+  { key: "ship_within_hours", label: "Ship goal (hours)", hint: "Orders KPI label" },
+  { key: "dpmo_target", label: "DPMO target", hint: "Quality / Six Sigma" },
+  { key: "target_rty", label: "Rolled throughput yield target", hint: "Quality" },
+  { key: "min_cpk", label: "Minimum Cpk", hint: "Quality" },
+  { key: "configuration_accuracy_target", label: "Configuration accuracy target", hint: "Quality & dashboard" },
+  { key: "service_level_target", label: "Service level", hint: "Planning / inventory" },
+  { key: "default_safety_stock_days", label: "Default safety stock (days)", hint: "Planning" },
+];
+
 function Settings() {
+  const {
+    operational,
+    operationalLoading,
+    operationalSource,
+    mergedParameterMap,
+    parameterOverrides,
+    saveParameterOverrides,
+    clearParameterOverrides,
+  } = useOperationalWorkbench();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState("live");
+  const [draft, setDraft] = useState({});
+  const [saveNote, setSaveNote] = useState("");
 
   useEffect(() => {
     getForecastParameters()
@@ -3467,14 +5536,97 @@ function Settings() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    const next = {};
+    for (const { key } of SETTINGS_TUNABLE_KEYS) {
+      const v = mergedParameterMap[key];
+      next[key] = v !== undefined && v !== null ? String(v) : "";
+    }
+    setDraft(next);
+  }, [mergedParameterMap]);
+
+  const baseMap = operational?.forecast_parameter_map ?? {};
+
+  const onSaveBrowserTuning = () => {
+    const patch = {};
+    for (const { key } of SETTINGS_TUNABLE_KEYS) {
+      const raw = draft[key];
+      if (raw === "" || raw === undefined) continue;
+      const n = Number(raw);
+      if (Number.isFinite(n)) patch[key] = n;
+    }
+    saveParameterOverrides(patch);
+    setSaveNote("Saved to this browser. Orders and Quality use these effective values until you clear overrides.");
+  };
+
   return (
-    <Page title="Settings & Parameters" subtitle="Control planning thresholds and operational targets.">
-      {source === "mock" ? (
+    <Page
+      title="Settings"
+      subtitle={
+        operational?.purpose?.settings ??
+        "Control forecasting parameters, safety stock, ship and quality targets, and other thresholds — tied to Orders & Targets and Quality / Six Sigma."
+      }
+    >
+      <CardBox title="Purpose">
+        <Typography variant="body2" color="text.secondary">
+          Adjust forecasting parameters, safety stock levels, seasonality windows, ship and quality targets, and other rules. Values below marked as shared
+          drive the KPI targets on <strong>Orders & Targets</strong> and <strong>Quality / Six Sigma</strong>. Browser overrides apply immediately on those
+          pages without changing the database (useful for what-if reviews).
+        </Typography>
+      </CardBox>
+
+      {operationalSource === "mock" ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          Forecast parameters API unavailable. No rows to show — run the Django API and import seed data (
-          <code>forecast_parameters.csv</code>).
+          Operational workbench offline — forecast table may still load; tuning defaults use embedded fallbacks until the API is available.
         </Alert>
       ) : null}
+      {source === "mock" ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Forecast parameters API unavailable. Run the Django API and import seed data (<code>forecast_parameters.csv</code>).
+        </Alert>
+      ) : null}
+
+      {saveNote ? (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSaveNote("")}>
+          {saveNote}
+        </Alert>
+      ) : null}
+
+      <CardBox title="Shared targets (browser overrides)">
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Edit and save to store overrides in local storage. <strong>Effective value</strong> = server parameter merged with your override.{" "}
+          {Object.keys(parameterOverrides).length ? (
+            <Button size="small" onClick={() => { clearParameterOverrides(); setSaveNote("Cleared browser overrides."); }}>
+              Clear overrides
+            </Button>
+          ) : null}
+        </Typography>
+        <Grid container spacing={2}>
+          {SETTINGS_TUNABLE_KEYS.map(({ key, label, hint }) => {
+            const hasOverride = Object.prototype.hasOwnProperty.call(parameterOverrides, key);
+            const serverVal = baseMap[key];
+            const effective = mergedParameterMap[key];
+            return (
+              <Grid key={key} size={{ xs: 12, sm: 6, md: 4 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  label={label}
+                  helperText={`${hint} · Server: ${serverVal ?? "—"} · Effective: ${effective ?? "—"}${hasOverride ? " (override)" : ""}`}
+                  value={draft[key] ?? ""}
+                  onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
+                />
+              </Grid>
+            );
+          })}
+        </Grid>
+        <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+          <Button variant="contained" color="secondary" onClick={onSaveBrowserTuning}>
+            Save browser tuning
+          </Button>
+        </Stack>
+      </CardBox>
+
       <ActionRow
         actions={[
           { label: "Edit Parameter" },
@@ -3483,18 +5635,30 @@ function Settings() {
           { label: "Clone Scenario", variant: "contained", color: "secondary" },
         ]}
       />
+
+      <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1, mt: 1 }}>
+        All forecast parameters (database)
+      </Typography>
       <SimpleTable
-        columns={["Parameter", "Value", "Type", "Effective from", "Effective to", "Active", "Editable"]}
-        rows={rows.map((p) => [
-          formatForecastParameterLabel(p.parameter_name),
-          p.parameter_value ?? "—",
-          p.parameter_type ?? "—",
-          p.effective_start ?? "—",
-          p.effective_end ?? "—",
-          p.is_active ? "Yes" : "No",
-          "Yes",
-        ])}
-        loading={loading}
+        columns={["Parameter", "Stored value", "Effective", "Type", "Active", "Used on"]}
+        rows={rows.map((p) => {
+          const name = p.parameter_name;
+          const tunable = SETTINGS_TUNABLE_KEYS.some((t) => t.key === name);
+          const seasonal = /season|promo|christmas|easter|mega/i.test(name);
+          const usedOn = tunable ? "Orders / Quality" : seasonal ? "Forecasting" : "Planning / other";
+          const eff = mergedParameterMap[name];
+          const stored = p.parameter_value ?? "—";
+          const effDisp = eff !== undefined && eff !== null ? String(eff) : "—";
+          return [
+            formatForecastParameterLabel(name),
+            stored,
+            effDisp,
+            p.parameter_type ?? "—",
+            p.is_active ? "Yes" : "No",
+            usedOn,
+          ];
+        })}
+        loading={loading || operationalLoading}
       />
     </Page>
   );
@@ -3599,7 +5763,8 @@ function exportSvgAsPng(svgEl, filename) {
   img.src = url;
 }
 
-function MiniLineChart({ labels, values, color = primaryMain, yLabel = "", targetValue = null }) {
+function MiniLineChart({ labels, values, color = primaryMain, yLabel = "", yValueUnit = "", targetValue = null, chipLabel = "Projected Orders" }) {
+  const fmt = (n) => `${Number(n).toLocaleString()}${yValueUnit}`;
   const maxValue = Math.max(...values);
   const minValue = Math.min(...values);
   const range = Math.max(1, maxValue - minValue);
@@ -3635,8 +5800,8 @@ function MiniLineChart({ labels, values, color = primaryMain, yLabel = "", targe
     <Box sx={{ borderRadius: 2, bgcolor: "#f8fafc", border: "1px solid #e2e8f0", p: 2 }}>
       <Stack direction="row" sx={{ mb: 1, justifyContent: "space-between", alignItems: "center" }}>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-          <Chip size="small" label="Projected Orders" sx={{ bgcolor: alpha(theme.palette.primary.main, 0.14), color: primaryMain }} />
-          {targetValue !== null ? <Chip size="small" label={`Target ${targetValue}`} sx={{ bgcolor: "rgba(16, 185, 129, 0.12)", color: "#047857" }} /> : null}
+          <Chip size="small" label={chipLabel} sx={{ bgcolor: alpha(theme.palette.primary.main, 0.14), color: primaryMain }} />
+          {targetValue !== null ? <Chip size="small" label={`Target ${fmt(targetValue)}`} sx={{ bgcolor: "rgba(16, 185, 129, 0.12)", color: "#047857" }} /> : null}
         </Stack>
         <Stack direction="row" spacing={0.5}>
           <Tooltip title="Export SVG" {...TOOLTIP_DELAY_PROPS}>
@@ -3652,13 +5817,13 @@ function MiniLineChart({ labels, values, color = primaryMain, yLabel = "", targe
         </Stack>
       </Stack>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <svg ref={svgRef} width={chartWidth} height={chartHeight} role="img" aria-label="Forecast line chart">
+        <svg ref={svgRef} width={chartWidth} height={chartHeight} role="img" aria-label={yLabel ? `${yLabel} over time` : "Line chart"}>
           <line x1={padX} y1={lineBottom} x2={chartWidth - padX} y2={lineBottom} stroke="#94a3b8" />
           <line x1={padX} y1={lineTop} x2={padX} y2={lineBottom} stroke="#94a3b8" />
           {targetY !== null ? (
             <>
               <line x1={padX} y1={targetY} x2={chartWidth - padX} y2={targetY} stroke="#10b981" strokeDasharray="6 6" />
-              <text x={chartWidth - padX} y={targetY - 6} fontSize="12" fill="#047857" textAnchor="end">{`Target ${targetValue}`}</text>
+              <text x={chartWidth - padX} y={targetY - 6} fontSize="12" fill="#047857" textAnchor="end">{`Target ${fmt(targetValue)}`}</text>
             </>
           ) : null}
           <path d={smoothPath} fill="none" stroke={color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
@@ -3672,7 +5837,7 @@ function MiniLineChart({ labels, values, color = primaryMain, yLabel = "", targe
               onMouseEnter={() => setHoveredPoint(point)}
               onMouseLeave={() => setHoveredPoint(null)}
             >
-              <title>{`${point.label}: ${point.value}`}</title>
+              <title>{`${point.label}: ${fmt(point.value)}`}</title>
             </circle>
           ))}
           {hoveredPoint ? (
@@ -3693,18 +5858,18 @@ function MiniLineChart({ labels, values, color = primaryMain, yLabel = "", targe
                 fill="#ffffff"
                 textAnchor="middle"
               >
-                {`${hoveredPoint.label}: ${hoveredPoint.value}`}
+                {`${hoveredPoint.label}: ${fmt(hoveredPoint.value)}`}
               </text>
             </g>
           ) : null}
-          <text x={padX} y={padY + 2} fontSize="12" fill="#475569">{maxValue}</text>
-          <text x={padX} y={lineBottom + 14} fontSize="12" fill="#475569">{minValue}</text>
+          <text x={padX} y={padY + 2} fontSize="12" fill="#475569">{fmt(maxValue)}</text>
+          <text x={padX} y={lineBottom + 14} fontSize="12" fill="#475569">{fmt(minValue)}</text>
           <text x={chartWidth - padX} y={padY + 2} fontSize="12" fill="#64748b" textAnchor="end">{yLabel}</text>
         </svg>
       </Box>
       <Stack direction="row" spacing={1.5} sx={{ mt: 1.2, flexWrap: "wrap" }}>
         {labels.map((label, idx) => (
-          <Typography key={label} variant="caption" color="text.secondary">{`${label}: ${values[idx]}`}</Typography>
+          <Typography key={label} variant="caption" color="text.secondary">{`${label}: ${fmt(values[idx])}`}</Typography>
         ))}
       </Stack>
     </Box>

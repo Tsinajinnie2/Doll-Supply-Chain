@@ -157,5 +157,8 @@ GLASSES_NONE,glasses,Glasses option NONE,ALL,ALL,ALL,ALL,ALL,ALL,NONE,0.0,0.0,2,
 GLASSES_GLS1,glasses,Glasses option GLS1,ALL,ALL,ALL,ALL,ALL,ALL,GLS1,0.65,0.008,2,True
 GLASSES_GLS2,glasses,Glasses option GLS2,ALL,ALL,ALL,ALL,ALL,ALL,GLS2,0.65,0.008,2,True
 GLASSES_GLS3,glasses,Glasses option GLS3,ALL,ALL,ALL,ALL,ALL,ALL,GLS3,0.65,0.008,2,True
-TORSO_10IN_MUSLIN_FOAM,torso,Completed 10 inch memory-foam stuffed muslin torso,ALL,ALL,ALL,ALL,ALL,ALL,ALL,3.9,0.12,8,True
+SKU-OPT-0069,head,Head Deep,Deep,ALL,ALL,ALL,ALL,ALL,ALL,12.00,0.09,5,True
+SKU-OPT-0070,head,Head Light,Light,ALL,ALL,ALL,ALL,ALL,ALL,12.00,0.09,5,True
+SKU-OPT-0071,head,Head Medium,Medium,ALL,ALL,ALL,ALL,ALL,ALL,12.00,0.09,5,True
+TORSO_COMPLETED,torso,Completed soft torso,ALL,ALL,ALL,ALL,ALL,ALL,ALL,47.75,0.12,8,True
 PACKAGING_STD,packaging,Standard packaging,ALL,ALL,ALL,ALL,ALL,ALL,ALL,1.2,0.05,3,True

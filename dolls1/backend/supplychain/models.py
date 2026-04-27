@@ -185,6 +185,9 @@ class DailyTarget(TimeStampedModel):
     actual_shipped = models.IntegerField(default=0)
     backlog_qty = models.IntegerField(default=0)
 
+    on_time_ship_rate = models.DecimalField(max_digits=7, decimal_places=4, null=True, blank=True)
+    season_window = models.CharField(max_length=40, blank=True, default="")
+
     @property
     def ship_achievement_rate(self):
         if self.target_shipped == 0:
@@ -207,6 +210,9 @@ class WeeklyTarget(TimeStampedModel):
     actual_assembled = models.IntegerField(default=0)
     actual_shipped = models.IntegerField(default=0)
 
+    on_time_ship_rate = models.DecimalField(max_digits=7, decimal_places=4, null=True, blank=True)
+    ending_backlog = models.IntegerField(default=0)
+
     @property
     def achievement_rate(self):
         if self.target_shipped == 0:
@@ -227,6 +233,22 @@ class ForecastParameter(TimeStampedModel):
 
     def __str__(self):
         return self.parameter_name
+
+
+class MonthlyDollUnitSale(TimeStampedModel):
+    """Completed doll units sold (or shipped) per calendar month — drives demand forecast workbench."""
+
+    year_month = models.CharField(max_length=7, unique=True, db_index=True)
+    units_sold = models.PositiveIntegerField(default=0)
+    notes = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        ordering = ["year_month"]
+        verbose_name = "Monthly doll unit sale"
+        verbose_name_plural = "Monthly doll unit sales"
+
+    def __str__(self):
+        return f"{self.year_month}: {self.units_sold} dolls"
 
 
 class OrderRecommendation(TimeStampedModel):
