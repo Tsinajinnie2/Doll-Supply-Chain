@@ -22,6 +22,21 @@ export async function getSupplierParts() {
   return response.data;
 }
 
+export async function getParts() {
+  const response = await axios.get(`${API_BASE}/parts/`);
+  return response.data;
+}
+
+export async function createSupplier(payload) {
+  const response = await axios.post(`${API_BASE}/suppliers/`, payload);
+  return response.data;
+}
+
+export async function createSupplierPart(payload) {
+  const response = await axios.post(`${API_BASE}/supplier-parts/`, payload);
+  return response.data;
+}
+
 export async function getOrders() {
   const response = await axios.get(`${API_BASE}/orders/`);
   return response.data;

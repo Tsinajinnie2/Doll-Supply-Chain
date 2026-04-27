@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import Box from "@mui/material/Box";
@@ -36,6 +36,14 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
+import FormControl from "@mui/material/FormControl";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import FormGroup from "@mui/material/FormGroup";
+import InputLabel from "@mui/material/InputLabel";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import Checkbox from "@mui/material/Checkbox";
+import Divider from "@mui/material/Divider";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -44,6 +52,8 @@ import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 import ImageOutlinedIcon from "@mui/icons-material/ImageOutlined";
 import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
 import ReplayIcon from "@mui/icons-material/Replay";
+import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { alpha } from "@mui/material/styles";
 import { unzipSync, strFromU8 } from "fflate";
 import {
@@ -52,6 +62,9 @@ import {
   getInventory,
   getSuppliers,
   getSupplierParts,
+  getParts,
+  createSupplier,
+  createSupplierPart,
   getOrders,
   getDefects,
   getForecastParameters,
@@ -179,6 +192,998 @@ function compareSupplierPartLinks(a, b) {
   } else if (pa) return -1;
   else if (pb) return 1;
   return String(sa).localeCompare(String(sb), undefined, { sensitivity: "base" });
+}
+
+/** Aggregate supplier-parts for a supplier: lead mean/std and on-time delivery. */
+function computeLeadTimeRiskFromPartLinks(links) {
+  if (!Array.isArray(links) || links.length === 0) {
+    return {
+      band: "unknown",
+      chipLabel: "N/A",
+      caption: "No supplier-part rows — import or link parts to score lead time.",
+      sortValue: "0",
+      searchText: "lead time N/A",
+    };
+  }
+  const upperTails = [];
+  const otds = [];
+  for (const l of links) {
+    const m = Number(l.lead_time_days_mean ?? 0);
+    const s = Number(l.lead_time_days_std ?? 0);
+    let otd = Number(l.on_time_delivery_rate ?? 1);
+    if (otd > 1 && otd <= 100) otd /= 100;
+    upperTails.push(m + s);
+    otds.push(Number.isFinite(otd) ? otd : 1);
+  }
+  const worstDays = Math.max(...upperTails);
+  const minOtd = Math.min(...otds);
+  let band;
+  if (worstDays <= 20 && minOtd >= 0.9) band = "green";
+  else if (worstDays <= 28 && minOtd >= 0.82) band = "yellow";
+  else band = "red";
+  const chipLabel = band === "green" ? "Low" : band === "yellow" ? "Moderate" : "High";
+  const caption = `Tail ≈ ${worstDays.toFixed(0)} d (mean + σ) · worst OTD ${(minOtd * 100).toFixed(0)}%`;
+  const sortValue = band === "green" ? "1" : band === "yellow" ? "2" : "3";
+  return {
+    band,
+    chipLabel,
+    caption,
+    sortValue,
+    searchText: `lead time ${chipLabel} ${caption}`,
+  };
+}
+
+/** Rich table cell: risk band + metrics (for All Suppliers → Lead Time Risk). */
+function leadTimeRiskReviewCell(links) {
+  const r = computeLeadTimeRiskFromPartLinks(links);
+  const chipColor =
+    r.band === "green" ? "success" : r.band === "yellow" ? "warning" : r.band === "red" ? "error" : "default";
+  return {
+    sortValue: r.sortValue,
+    searchText: r.searchText,
+    display: (
+      <Stack alignItems="flex-start" spacing={0.5}>
+        <Chip size="small" color={chipColor} label={r.chipLabel} sx={{ height: 22, fontSize: "0.7rem" }} />
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.25, maxWidth: 240, display: "block" }}>
+          {r.caption}
+        </Typography>
+      </Stack>
+    ),
+  };
+}
+
+/** Duty exposure from supplier-parts tariff_rate (model: peak line drives compliance cost risk). */
+function computeTariffRiskFromPartLinks(links) {
+  if (!Array.isArray(links) || links.length === 0) {
+    return {
+      band: "unknown",
+      chipLabel: "N/A",
+      caption: "No supplier-part rows — import or link parts to score tariff exposure.",
+      sortValue: "0",
+      searchText: "tariff N/A",
+    };
+  }
+  const rates = [];
+  for (const l of links) {
+    let r = Number(l.tariff_rate ?? 0);
+    if (r > 1 && r <= 100) r /= 100;
+    if (!Number.isFinite(r) || r < 0) r = 0;
+    rates.push(r);
+  }
+  const maxTariff = Math.max(...rates);
+  const avgTariff = rates.reduce((a, b) => a + b, 0) / rates.length;
+  let band;
+  if (maxTariff <= 0.05) band = "green";
+  else if (maxTariff <= 0.15) band = "yellow";
+  else band = "red";
+  const chipLabel = band === "green" ? "Low" : band === "yellow" ? "Moderate" : "High";
+  const caption = `Peak duty ${(maxTariff * 100).toFixed(1)}% · line avg ${(avgTariff * 100).toFixed(1)}%`;
+  const sortValue = band === "green" ? "1" : band === "yellow" ? "2" : "3";
+  return {
+    band,
+    chipLabel,
+    caption,
+    sortValue,
+    searchText: `tariff ${chipLabel} ${caption}`,
+  };
+}
+
+function tariffRiskReviewCell(links) {
+  const r = computeTariffRiskFromPartLinks(links);
+  const chipColor =
+    r.band === "green" ? "success" : r.band === "yellow" ? "warning" : r.band === "red" ? "error" : "default";
+  return {
+    sortValue: r.sortValue,
+    searchText: r.searchText,
+    display: (
+      <Stack alignItems="flex-start" spacing={0.5}>
+        <Chip size="small" color={chipColor} label={r.chipLabel} sx={{ height: 22, fontSize: "0.7rem" }} />
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.25, maxWidth: 240, display: "block" }}>
+          {r.caption}
+        </Typography>
+      </Stack>
+    ),
+  };
+}
+
+function compareRiskBandChip(band, label) {
+  const color =
+    band === "green" ? "success" : band === "yellow" ? "warning" : band === "red" ? "error" : "default";
+  return <Chip size="small" variant="outlined" color={color} label={label} sx={{ height: 24, fontWeight: 700 }} />;
+}
+
+/** Per-supplier aggregates for Compare Suppliers (same signals as Lead / Tariff risk columns). */
+function buildSupplierCompareAnalytics(supplier, links) {
+  const lead = computeLeadTimeRiskFromPartLinks(links);
+  const tariff = computeTariffRiskFromPartLinks(links);
+  const lineCount = links.length;
+  const primaryCount = links.filter((l) => l.is_primary).length;
+  let avgUnit = null;
+  let avgLanded = null;
+  let worstTail = null;
+  let minOtd = null;
+  let peakDutyPct = null;
+  let avgDutyPct = null;
+  if (links.length) {
+    const landeds = links.map((l) => {
+      const base = Number(l.base_cost ?? 0);
+      const ship = Number(l.shipping_cost_per_unit ?? 0);
+      let tr = Number(l.tariff_rate ?? 0);
+      if (tr > 1 && tr <= 100) tr /= 100;
+      return base + ship + base * tr;
+    });
+    avgLanded = landeds.reduce((a, b) => a + b, 0) / landeds.length;
+    avgUnit = links.reduce((a, l) => a + Number(l.base_cost ?? 0), 0) / links.length;
+    worstTail = Math.max(
+      ...links.map((l) => Number(l.lead_time_days_mean ?? 0) + Number(l.lead_time_days_std ?? 0))
+    );
+    const otds = links.map((l) => {
+      let o = Number(l.on_time_delivery_rate ?? 1);
+      if (o > 1 && o <= 100) o /= 100;
+      return Number.isFinite(o) ? o : 1;
+    });
+    minOtd = Math.min(...otds);
+    const rates = links.map((l) => {
+      let r = Number(l.tariff_rate ?? 0);
+      if (r > 1 && r <= 100) r /= 100;
+      return Number.isFinite(r) && r >= 0 ? r : 0;
+    });
+    peakDutyPct = Math.max(...rates) * 100;
+    avgDutyPct = (rates.reduce((a, b) => a + b, 0) / rates.length) * 100;
+  }
+  const certSummary = [
+    supplier.cpsia_current ? "CPSC" : null,
+    supplier.astm_f963_current ? "ASTM" : null,
+    supplier.iso_9001_current ? "ISO 9001" : null,
+    supplier.oeko_tex_current ? "Oeko-Tex" : null,
+    supplier.foam_cert_current ? "Foam" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return {
+    lead,
+    tariff,
+    lineCount,
+    primaryCount,
+    avgUnit,
+    avgLanded,
+    worstTail,
+    minOtd,
+    peakDutyPct,
+    avgDutyPct,
+    certSummary: certSummary || "—",
+  };
+}
+
+function SupplierCompareDialog({ open, onClose, source, suppliers, linksBySupplierId }) {
+  const analyticsRows = useMemo(() => {
+    if (!suppliers.length || Array.isArray(suppliers[0])) return [];
+    return [...suppliers]
+      .map((s) => {
+        const links = linksBySupplierId.get(s.id) ?? [];
+        return { supplier: s, ...buildSupplierCompareAnalytics(s, links) };
+      })
+      .sort((a, b) =>
+        String(a.supplier.supplier_name || "").localeCompare(String(b.supplier.supplier_name || ""), undefined, {
+          sensitivity: "base",
+        })
+      );
+  }, [suppliers, linksBySupplierId]);
+
+  const fmtUsd = (n) =>
+    n == null || Number.isNaN(n)
+      ? "—"
+      : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth aria-labelledby="supplier-compare-title">
+      <DialogTitle id="supplier-compare-title">Compare Suppliers</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Typography variant="body2" color="text.secondary">
+            Side-by-side view uses the same inputs as the All Suppliers table:{" "}
+            <strong>supplier master</strong> (country, certification flags) and{" "}
+            <strong>supplier–part lines</strong> (unit cost, shipping, tariff rate, lead mean/σ, on-time delivery, primary flag).
+            Estimated landed unit cost is{" "}
+            <Typography component="span" variant="body2" sx={{ fontStyle: "italic" }}>
+              base + shipping + base × duty
+            </Typography>
+            . Lead time risk uses max(mean + σ) and minimum OTD across lines; tariff risk uses peak duty and line-average duty.
+          </Typography>
+          {source !== "live" ? (
+            <Alert severity="info">API data is offline — open this view when connected for full metrics.</Alert>
+          ) : null}
+          {analyticsRows.length ? (
+            <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 420 }}>
+              <Table size="small" stickyHeader aria-label="Supplier comparison">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>Supplier</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Country</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Lines
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Primary
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Avg base
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Avg landed*
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Lead tail (d)
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Worst OTD
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Peak duty
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700, minWidth: 140 }}>Certifications</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Lead risk</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Tariff risk</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {analyticsRows.map((row) => (
+                    <TableRow key={row.supplier.id} hover>
+                      <TableCell>{row.supplier.supplier_name}</TableCell>
+                      <TableCell>{row.supplier.country}</TableCell>
+                      <TableCell align="right">{row.lineCount || "—"}</TableCell>
+                      <TableCell align="right">{row.lineCount ? row.primaryCount : "—"}</TableCell>
+                      <TableCell align="right">{fmtUsd(row.avgUnit)}</TableCell>
+                      <TableCell align="right">{fmtUsd(row.avgLanded)}</TableCell>
+                      <TableCell align="right">
+                        {row.worstTail != null ? row.worstTail.toFixed(0) : "—"}
+                      </TableCell>
+                      <TableCell align="right">
+                        {row.minOtd != null ? `${(row.minOtd * 100).toFixed(0)}%` : "—"}
+                      </TableCell>
+                      <TableCell align="right">
+                        {row.peakDutyPct != null ? `${row.peakDutyPct.toFixed(1)}%` : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" sx={{ display: "block", lineHeight: 1.35 }}>
+                          {row.certSummary}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{compareRiskBandChip(row.lead.band, row.lead.chipLabel)}</TableCell>
+                      <TableCell>{compareRiskBandChip(row.tariff.band, row.tariff.chipLabel)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography color="text.secondary">No supplier records to compare.</Typography>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} variant="contained" color="primary">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/** Static analytics CSV (run: `python manage.py generate_frequent_supplier_analytics`). */
+const FREQUENT_CSV_BASE = `${import.meta.env.BASE_URL}dolls1_seed/`;
+
+function parseSimpleCsv(text) {
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .filter((line) => line.length);
+  if (!lines.length) return [];
+  const headers = lines[0].split(",").map((h) => h.trim());
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(",");
+    if (cells.length < headers.length) continue;
+    const obj = {};
+    headers.forEach((h, j) => {
+      obj[h] = String(cells[j] ?? "").trim();
+    });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function MultiSeriesUsdLineChart({ xLabels, series, title, yLabel = "USD / unit" }) {
+  const w = 680;
+  const h = 280;
+  const padL = 52;
+  const padR = 24;
+  const padT = 28;
+  const padB = 44;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+  const all = series.flatMap((s) => s.values);
+  const rawMin = Math.min(...all, 0);
+  const rawMax = Math.max(...all, 0.01);
+  const padY = (rawMax - rawMin) * 0.08 || 0.5;
+  const minV = Math.max(0, rawMin - padY);
+  const maxV = rawMax + padY;
+  const rng = maxV - minV || 1;
+  const xStep = plotW / Math.max(1, xLabels.length - 1);
+
+  const pathFor = (values) =>
+    values
+      .map((v, i) => {
+        const x = padL + i * xStep;
+        const y = padT + plotH - ((Number(v) - minV) / rng) * plotH;
+        return `${i === 0 ? "M" : "L"} ${x} ${y}`;
+      })
+      .join(" ");
+
+  return (
+    <Box sx={{ width: "100%", overflowX: "auto" }}>
+      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+        {title}
+      </Typography>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} role="img" aria-label={title}>
+        <line x1={padL} y1={padT + plotH} x2={padL + plotW} y2={padT + plotH} stroke="#94a3b8" />
+        <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke="#94a3b8" />
+        <text x={padL - 6} y={padT + 6} fontSize="11" fill="#64748b" textAnchor="end">
+          {maxV.toFixed(2)}
+        </text>
+        <text x={padL - 6} y={padT + plotH} fontSize="11" fill="#64748b" textAnchor="end">
+          {minV.toFixed(2)}
+        </text>
+        <text x={padL} y={h - 10} fontSize="11" fill="#64748b">
+          {yLabel}
+        </text>
+        {series.map((s) => (
+          <path key={s.name} d={pathFor(s.values)} fill="none" stroke={s.color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        ))}
+        {xLabels.map((lab, i) => (
+          <text
+            key={lab}
+            x={padL + i * xStep}
+            y={padT + plotH + 22}
+            fontSize="12"
+            fill="#334155"
+            textAnchor="middle"
+          >
+            {lab}
+          </text>
+        ))}
+      </svg>
+      <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap", mt: 1 }}>
+        {series.map((s) => (
+          <Stack key={s.name} direction="row" spacing={0.75} alignItems="center">
+            <Box sx={{ width: 14, height: 3, bgcolor: s.color, borderRadius: 1 }} />
+            <Typography variant="caption" color="text.secondary">
+              {s.name}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+}
+
+function FrequentSupplierDialog({ open, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [freqRows, setFreqRows] = useState([]);
+  const [histRows, setHistRows] = useState([]);
+  const [selectedPart, setSelectedPart] = useState("");
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    setBusy(true);
+    setErr(null);
+    Promise.all([
+      fetch(`${FREQUENT_CSV_BASE}part_frequent_supplier_last_fy.csv`).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.text();
+      }),
+      fetch(`${FREQUENT_CSV_BASE}part_price_shipping_history_4y.csv`).then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.text();
+      }),
+    ])
+      .then(([a, b]) => {
+        if (cancelled) return;
+        const f = parseSimpleCsv(a);
+        const h = parseSimpleCsv(b);
+        setFreqRows(f);
+        setHistRows(h);
+        setSelectedPart((prev) => (prev && f.some((row) => row.part_number === prev) ? prev : f[0]?.part_number ?? ""));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setErr(
+            "Could not load CSV analytics. From dolls1/backend run: python manage.py generate_frequent_supplier_analytics"
+          );
+          setFreqRows([]);
+          setHistRows([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const freqForPart = useMemo(
+    () => freqRows.find((r) => r.part_number === selectedPart),
+    [freqRows, selectedPart]
+  );
+
+  const chartPack = useMemo(() => {
+    if (!selectedPart || !histRows.length) return null;
+    const slice = histRows
+      .filter((r) => r.part_number === selectedPart)
+      .sort((a, b) => Number(a.calendar_year) - Number(b.calendar_year));
+    if (!slice.length) return null;
+    return {
+      labels: slice.map((r) => r.calendar_year),
+      base: slice.map((r) => Number(r.unit_base_cost_usd)),
+      ship: slice.map((r) => Number(r.shipping_per_unit_usd)),
+      total: slice.map((r) => Number(r.total_unit_usd)),
+    };
+  }, [selectedPart, histRows]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="frequent-supplier-title">
+      <DialogTitle id="frequent-supplier-title">Frequent Supplier</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Typography variant="body2" color="text.secondary">
+            Most-used supplier per part for the <strong>last closed fiscal year</strong> is <strong>simulated</strong> from
+            seeded weights (deterministic per part and supplier).{" "}
+            <strong>2023–2026 unit base and shipping</strong> use your current{" "}
+            <Typography component="span" variant="body2" sx={{ fontStyle: "italic" }}>
+              supplier_parts
+            </Typography>{" "}
+            prices for <strong>2026</strong>; earlier years are back-cast from those anchors. Totals = base + shipping
+            (duty excluded).
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Source files:{" "}
+            <Typography component="span" variant="caption" sx={{ fontFamily: "monospace" }}>
+              data/dolls1_seed_csv/part_frequent_supplier_last_fy.csv
+            </Typography>
+            ,{" "}
+            <Typography component="span" variant="caption" sx={{ fontFamily: "monospace" }}>
+              part_price_shipping_history_4y.csv
+            </Typography>
+          </Typography>
+          {err ? <Alert severity="warning">{err}</Alert> : null}
+          {busy ? <CircularProgress size={28} sx={{ alignSelf: "center" }} /> : null}
+          {!busy && !err && freqRows.length ? (
+            <>
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 260 }}>
+                <Table size="small" stickyHeader aria-label="Frequent supplier by part">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 700 }}>Part</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>SKU</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>FY</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Frequent supplier</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        Sim. lines
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        Share %
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {freqRows.map((r) => (
+                      <TableRow
+                        key={r.part_number}
+                        hover
+                        selected={r.part_number === selectedPart}
+                        onClick={() => setSelectedPart(r.part_number)}
+                        sx={{ cursor: "pointer" }}
+                      >
+                        <TableCell>{r.part_name}</TableCell>
+                        <TableCell>{r.part_number}</TableCell>
+                        <TableCell>{r.fiscal_year_label}</TableCell>
+                        <TableCell>
+                          {r.frequent_supplier_name}
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                            {r.frequent_supplier_code}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">{r.simulated_order_lines_last_fy}</TableCell>
+                        <TableCell align="right">{r.simulated_share_of_part_volume_pct}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <FormControl size="small" sx={{ minWidth: 280 }}>
+                <InputLabel id="frequent-part-label">Part for price history</InputLabel>
+                <Select
+                  labelId="frequent-part-label"
+                  label="Part for price history"
+                  value={selectedPart}
+                  onChange={(e) => setSelectedPart(e.target.value)}
+                >
+                  {freqRows.map((r) => (
+                    <MenuItem key={r.part_number} value={r.part_number}>
+                      {r.part_name} ({r.part_number})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {freqForPart ? (
+                <Typography variant="body2">
+                  <strong>Frequent supplier:</strong> {freqForPart.frequent_supplier_name} — chart uses this vendor’s
+                  unit economics.
+                </Typography>
+              ) : null}
+              {chartPack ? (
+                <Paper variant="outlined" sx={{ p: 2, bgcolor: "#fafbfc" }}>
+                  <MultiSeriesUsdLineChart
+                    title={`${freqForPart?.part_name ?? selectedPart} — 4-year unit cost`}
+                    xLabels={chartPack.labels}
+                    series={[
+                      { name: "Unit base", values: chartPack.base, color: "#2563eb" },
+                      { name: "Shipping / unit", values: chartPack.ship, color: "#ea580c" },
+                      { name: "Base + shipping", values: chartPack.total, color: "#059669" },
+                    ]}
+                  />
+                </Paper>
+              ) : (
+                <Typography color="text.secondary">No history rows for this part.</Typography>
+              )}
+            </>
+          ) : null}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} variant="contained" color="primary">
+          Close
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function formatSupplierApiError(err) {
+  const d = err?.response?.data;
+  if (d == null) return err?.message || "Request failed.";
+  if (typeof d === "string") return d;
+  if (Array.isArray(d.detail)) return d.detail.join(", ");
+  if (typeof d === "object") {
+    return Object.entries(d)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
+      .join("; ");
+  }
+  return String(d);
+}
+
+function defaultBackupSupplierForm() {
+  return {
+    supplier_code: "",
+    supplier_name: "",
+    country: "",
+    iso_9001_current: false,
+    cpsia_current: false,
+    astm_f963_current: false,
+    oeko_tex_current: false,
+    foam_cert_current: false,
+    certification_expiry: "",
+    supplier_score: "0",
+    add_part_link: true,
+    part_id: "",
+    supplier_part_number: "",
+    base_cost: "",
+    shipping_cost_per_unit: "0",
+    tariff_rate: "0",
+    lead_time_days_mean: "14",
+    lead_time_days_std: "3",
+    minimum_order_quantity: "1",
+    order_multiple: "1",
+    capacity_per_month: "8000",
+    on_time_delivery_rate: "1",
+    supplier_dpmo: "0",
+    is_primary: false,
+  };
+}
+
+function AddBackupSupplierDialog({ open, onClose, onCreated, source }) {
+  const [f, setF] = useState(defaultBackupSupplierForm);
+  const [parts, setParts] = useState([]);
+  const [partsLoading, setPartsLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const setField = (key, value) => setF((prev) => ({ ...prev, [key]: value }));
+
+  useEffect(() => {
+    if (!open) return;
+    setF(defaultBackupSupplierForm());
+    setError(null);
+    setPartsLoading(true);
+    getParts()
+      .then((data) => {
+        const list = data.results ?? data;
+        setParts(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setParts([]))
+      .finally(() => setPartsLoading(false));
+  }, [open]);
+
+  const sortedParts = useMemo(
+    () =>
+      [...parts].sort((a, b) =>
+        String(a.part_name ?? "").localeCompare(String(b.part_name ?? ""), undefined, { sensitivity: "base" })
+      ),
+    [parts]
+  );
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError(null);
+    const code = f.supplier_code.trim();
+    const name = f.supplier_name.trim();
+    const country = f.country.trim();
+    if (!code || !name || !country) {
+      setError("Supplier code, supplier name, and country are required.");
+      return;
+    }
+    if (f.add_part_link) {
+      if (!f.part_id) {
+        setError("Select a part for the backup link, or turn off “Add initial supplier–part link”.");
+        return;
+      }
+      if (f.base_cost === "" || Number.isNaN(Number(f.base_cost))) {
+        setError("Unit base cost is required when adding a supplier–part link.");
+        return;
+      }
+    }
+    setSubmitting(true);
+    try {
+      const supplierPayload = {
+        supplier_code: code,
+        supplier_name: name,
+        country,
+        iso_9001_current: f.iso_9001_current,
+        cpsia_current: f.cpsia_current,
+        astm_f963_current: f.astm_f963_current,
+        oeko_tex_current: f.oeko_tex_current,
+        foam_cert_current: f.foam_cert_current,
+        supplier_score: f.supplier_score || "0",
+      };
+      if (f.certification_expiry) supplierPayload.certification_expiry = f.certification_expiry;
+
+      const created = await createSupplier(supplierPayload);
+      const supplierId = created.id;
+
+      if (f.add_part_link && f.part_id) {
+        const part = parts.find((p) => String(p.id) === String(f.part_id));
+        const spn =
+          f.supplier_part_number.trim() ||
+          (part ? `${part.part_number}-${code}` : `${f.part_id}-${code}`);
+        await createSupplierPart({
+          supplier: supplierId,
+          part: Number(f.part_id),
+          supplier_part_number: spn.slice(0, 100),
+          base_cost: String(f.base_cost),
+          shipping_cost_per_unit: String(f.shipping_cost_per_unit || "0"),
+          tariff_rate: String(f.tariff_rate || "0"),
+          lead_time_days_mean: String(f.lead_time_days_mean || "14"),
+          lead_time_days_std: String(f.lead_time_days_std || "3"),
+          minimum_order_quantity: Math.max(1, parseInt(f.minimum_order_quantity, 10) || 1),
+          order_multiple: Math.max(1, parseInt(f.order_multiple, 10) || 1),
+          capacity_per_month: Math.max(0, parseInt(f.capacity_per_month, 10) || 0),
+          on_time_delivery_rate: String(f.on_time_delivery_rate ?? "1"),
+          supplier_dpmo: String(f.supplier_dpmo || "0"),
+          is_primary: Boolean(f.is_primary),
+        });
+      }
+
+      await onCreated();
+      onClose();
+    } catch (e) {
+      setError(formatSupplierApiError(e));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth aria-labelledby="add-backup-supplier-title">
+      <DialogTitle id="add-backup-supplier-title">Add Backup Supplier</DialogTitle>
+      <Box component="form" onSubmit={handleSubmit} noValidate>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {source !== "live" ? (
+              <Alert severity="info">
+                Supplier list above may be offline. Saving still calls the API — ensure the backend is running and
+                authenticated if your deployment requires it.
+              </Alert>
+            ) : null}
+            <Typography variant="body2" color="text.secondary">
+              Creates a <strong>Supplier</strong> row (shown under All Suppliers) and optionally one{" "}
+              <strong>supplier–part</strong> line so Lead Time Risk and Tariff Risk can be computed from unit economics.
+            </Typography>
+            {error ? <Alert severity="error">{error}</Alert> : null}
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+              Supplier identity
+            </Typography>
+            <Grid container spacing={1.5}>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  label="Supplier code"
+                  value={f.supplier_code}
+                  onChange={(e) => setField("supplier_code", e.target.value)}
+                  required
+                  fullWidth
+                  size="small"
+                  placeholder="e.g. SUP_BACKUP_01"
+                  helperText="Unique ID (matches supplier_code in imports)"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  label="Supplier name"
+                  value={f.supplier_name}
+                  onChange={(e) => setField("supplier_name", e.target.value)}
+                  required
+                  fullWidth
+                  size="small"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <TextField
+                  label="Country"
+                  value={f.country}
+                  onChange={(e) => setField("country", e.target.value)}
+                  required
+                  fullWidth
+                  size="small"
+                  placeholder="e.g. USA"
+                />
+              </Grid>
+            </Grid>
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+              Certifications (Supplier Risk / compliance)
+            </Typography>
+            <FormGroup sx={{ pl: 0.5 }}>
+              <FormControlLabel
+                control={<Checkbox checked={f.iso_9001_current} onChange={(e) => setField("iso_9001_current", e.target.checked)} />}
+                label="ISO 9001 current"
+              />
+              <FormControlLabel
+                control={<Checkbox checked={f.cpsia_current} onChange={(e) => setField("cpsia_current", e.target.checked)} />}
+                label="CPSIA (CPSC) current — drives “Certification” column when true"
+              />
+              <FormControlLabel
+                control={<Checkbox checked={f.astm_f963_current} onChange={(e) => setField("astm_f963_current", e.target.checked)} />}
+                label="ASTM F-963 current"
+              />
+              <FormControlLabel
+                control={<Checkbox checked={f.oeko_tex_current} onChange={(e) => setField("oeko_tex_current", e.target.checked)} />}
+                label="Oeko-Tex current"
+              />
+              <FormControlLabel
+                control={<Checkbox checked={f.foam_cert_current} onChange={(e) => setField("foam_cert_current", e.target.checked)} />}
+                label="Low-emission foam cert current"
+              />
+            </FormGroup>
+            <Grid container spacing={1.5}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Certification expiry"
+                  type="date"
+                  value={f.certification_expiry}
+                  onChange={(e) => setField("certification_expiry", e.target.value)}
+                  fullWidth
+                  size="small"
+                  slotProps={{ inputLabel: { shrink: true } }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Supplier score"
+                  value={f.supplier_score}
+                  onChange={(e) => setField("supplier_score", e.target.value)}
+                  fullWidth
+                  size="small"
+                  helperText="Internal score (decimal)"
+                />
+              </Grid>
+            </Grid>
+
+            <Divider />
+            <FormControlLabel
+              control={
+                <Checkbox checked={f.add_part_link} onChange={(e) => setField("add_part_link", e.target.checked)} />
+              }
+              label="Add initial supplier–part link (recommended for Lead / Tariff risk on this page)"
+            />
+
+            {f.add_part_link ? (
+              <>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                  Supplier–part economics
+                </Typography>
+                <FormControl size="small" fullWidth disabled={partsLoading}>
+                  <InputLabel id="backup-part-label">Part (SKU)</InputLabel>
+                  <Select
+                    labelId="backup-part-label"
+                    label="Part (SKU)"
+                    value={f.part_id}
+                    onChange={(e) => setField("part_id", e.target.value)}
+                  >
+                    <MenuItem value="">
+                      <em>Select part…</em>
+                    </MenuItem>
+                    {sortedParts.map((p) => (
+                      <MenuItem key={p.id} value={String(p.id)}>
+                        {p.part_name} ({p.part_number}) · {p.part_type}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {partsLoading ? <Typography variant="caption">Loading parts…</Typography> : null}
+
+                <Grid container spacing={1.5}>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Supplier part number"
+                      value={f.supplier_part_number}
+                      onChange={(e) => setField("supplier_part_number", e.target.value)}
+                      fullWidth
+                      size="small"
+                      helperText="Optional; defaults to {SKU}-{supplier code}"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox checked={f.is_primary} onChange={(e) => setField("is_primary", e.target.checked)} />
+                      }
+                      label="Primary for this part"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Unit base cost (USD)"
+                      value={f.base_cost}
+                      onChange={(e) => setField("base_cost", e.target.value)}
+                      fullWidth
+                      size="small"
+                      required
+                      inputProps={{ inputMode: "decimal" }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Shipping / unit (USD)"
+                      value={f.shipping_cost_per_unit}
+                      onChange={(e) => setField("shipping_cost_per_unit", e.target.value)}
+                      fullWidth
+                      size="small"
+                      inputProps={{ inputMode: "decimal" }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Tariff rate (0–1)"
+                      value={f.tariff_rate}
+                      onChange={(e) => setField("tariff_rate", e.target.value)}
+                      fullWidth
+                      size="small"
+                      helperText="Decimal duty on base (e.g. 0.05)"
+                      inputProps={{ inputMode: "decimal" }}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Lead time mean (days)"
+                      value={f.lead_time_days_mean}
+                      onChange={(e) => setField("lead_time_days_mean", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Lead time σ (days)"
+                      value={f.lead_time_days_std}
+                      onChange={(e) => setField("lead_time_days_std", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="On-time delivery (0–1)"
+                      value={f.on_time_delivery_rate}
+                      onChange={(e) => setField("on_time_delivery_rate", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="MOQ"
+                      value={f.minimum_order_quantity}
+                      onChange={(e) => setField("minimum_order_quantity", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Order multiple"
+                      value={f.order_multiple}
+                      onChange={(e) => setField("order_multiple", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 4 }}>
+                    <TextField
+                      label="Capacity / month"
+                      value={f.capacity_per_month}
+                      onChange={(e) => setField("capacity_per_month", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      label="Supplier DPMO"
+                      value={f.supplier_dpmo}
+                      onChange={(e) => setField("supplier_dpmo", e.target.value)}
+                      fullWidth
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+              </>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button type="button" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="contained" color="primary" disabled={submitting}>
+            {submitting ? "Saving…" : "Save supplier"}
+          </Button>
+        </DialogActions>
+      </Box>
+    </Dialog>
+  );
 }
 
 function compareDefectRecords(a, b) {
@@ -751,6 +1756,57 @@ ${body}
 }
 
 const PO_COMPANY_NAME = "OptiDoll Supply Chain";
+const PO_BUYER_ADDRESS_LINES = ["1200 Commerce Drive", "Building C", "Logan, UT 84321", "United States"];
+const PO_BUYER_PHONE = "+1 (555) 010-4200";
+const PO_BUYER_EMAIL = "procurement@optidoll.example";
+const PO_SHIP_TO_LINES = ["OptiDoll Fulfillment Center", "8800 Logistics Parkway", "Logan, UT 84321", "United States"];
+const PO_TERMS_TEXT =
+  "Payment: Net 30 days from invoice date unless otherwise agreed in writing. Prices are in USD. Title and risk of loss pass upon delivery to the ship-to address unless Incoterms state otherwise. Buyer may cancel undelivered quantities if shipment is delayed more than ten (10) business days beyond the requested delivery window.";
+const PO_STORAGE_SEQ_PREFIX = "optidoll_po_seq_";
+
+/** Local calendar date as YYYYMMDD (used in PO numbers). */
+function formatPoDateCompact(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+
+/**
+ * Reserve sequential PO numbers for today: YYYYMMDD-1, YYYYMMDD-2, …
+ * Persisted in localStorage so repeat exports advance the sequence.
+ */
+function allocPurchaseOrderNumbers(count) {
+  if (count < 1) return [];
+  const dateKey = formatPoDateCompact();
+  const storageKey = `${PO_STORAGE_SEQ_PREFIX}${dateKey}`;
+  let start = 0;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    const parsed = raw != null ? Number.parseInt(raw, 10) : 0;
+    start = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  } catch {
+    /* localStorage unavailable */
+  }
+  const nums = [];
+  for (let i = 0; i < count; i += 1) {
+    nums.push(`${dateKey}-${start + i + 1}`);
+  }
+  try {
+    localStorage.setItem(storageKey, String(start + count));
+  } catch {
+    /* quota / private mode */
+  }
+  return nums;
+}
+
+function vendorGroupsEquivalent(a, b) {
+  return (
+    String(a?.vendorName) === String(b?.vendorName) &&
+    String(a?.vendorCountry) === String(b?.vendorCountry) &&
+    String(a?.supplierCode ?? "") === String(b?.supplierCode ?? "")
+  );
+}
 
 /** Landed unit cost (base + shipping + tariff on base). */
 function landedSupplierUnitCost(sp) {
@@ -865,33 +1921,41 @@ function groupReorderLinesByVendor(lines) {
 }
 
 /**
- * Printable HTML: one page per vendor (professional PO + logo).
- * @returns {boolean} false if pop-up blocked
+ * Full HTML document: one page per vendor (B2B purchase order + logo).
+ * PO numbers: YYYYMMDD-# sequential for the session day (see allocPurchaseOrderNumbers).
+ * @returns {string|null} HTML document, or null if there is nothing to export
  */
-function openPurchaseOrdersPrint(vendorGroups, logoSrc) {
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (!w) return false;
-
+function buildPurchaseOrdersDocumentHtml(vendorGroups, logoSrc) {
   const issued = new Date();
   const issuedStr = issued.toLocaleDateString(undefined, { dateStyle: "long" });
-  const year = issued.getFullYear();
-  let pagesHtml = "";
+  const deliveryStr = new Date(issued.getFullYear(), issued.getMonth() + 1, 0).toLocaleDateString(undefined, {
+    dateStyle: "long",
+  });
 
-  vendorGroups.forEach((group, idx) => {
+  const sheets = [];
+  for (const group of vendorGroups) {
     const poLines = group.lines.filter((l) => l.hasVendor && l.unitCost != null);
-    if (!poLines.length) return;
+    if (poLines.length) sheets.push({ group, poLines });
+  }
 
-    const code = String(group.supplierCode || "VEND")
-      .replace(/[^A-Za-z0-9]+/g, "")
-      .slice(0, 10)
-      .toUpperCase();
-    const poNum = `PO-${year}-${code || "VEND"}-${String(idx + 1).padStart(3, "0")}`;
+  if (!sheets.length) return null;
+
+  const poNumbers = allocPurchaseOrderNumbers(sheets.length);
+  const billToHtml = [escapeHtml(PO_COMPANY_NAME), ...PO_BUYER_ADDRESS_LINES.map((ln) => escapeHtml(ln))].join("<br/>");
+  const shipToHtml = PO_SHIP_TO_LINES.map((ln) => escapeHtml(ln)).join("<br/>");
+
+  let pagesHtml = "";
+  sheets.forEach(({ group, poLines }, sheetIdx) => {
+    const poNum = poNumbers[sheetIdx];
     const subtotal = poLines.reduce((s, line) => s + (line.lineTotal ?? 0), 0);
+    const taxAmount = 0;
+    const grandTotal = subtotal + taxAmount;
+    const vc = String(group.supplierCode || "").trim() || "—";
 
     const tableRows = poLines
       .map((line, i) => {
         const ext = (line.unitCost ?? 0) * line.qty;
-        return `<tr><td>${i + 1}</td><td>${escapeHtml(line.partName)}</td><td>${escapeHtml(line.bodyPartLabel)}</td><td class="num">${line.qty}</td><td class="num">${(line.unitCost ?? 0).toFixed(2)}</td><td class="num">${ext.toFixed(2)}</td></tr>`;
+        return `<tr><td class="num">${i + 1}</td><td>${escapeHtml(line.partName)}</td><td>${escapeHtml(line.bodyPartLabel)}</td><td class="num">${line.qty}</td><td class="cen">EA</td><td class="num">${(line.unitCost ?? 0).toFixed(2)}</td><td class="num">${ext.toFixed(2)}</td></tr>`;
       })
       .join("");
 
@@ -899,67 +1963,115 @@ function openPurchaseOrdersPrint(vendorGroups, logoSrc) {
 
     pagesHtml += `
 <section class="po-sheet">
-  <header class="po-header">
-    <div class="brand"><img src="${safeLogo}" alt="" class="logo" width="120" height="auto" /></div>
-    <div class="title-block">
-      <h1>Purchase Order</h1>
-      <p class="co">${escapeHtml(PO_COMPANY_NAME)}</p>
+  <header class="po-top">
+    <div class="po-top-left">
+      <div class="brand"><img src="${safeLogo}" alt="" class="logo" width="132" height="auto" /></div>
+      <div class="doc-id">
+        <span class="doc-label">Purchase order</span>
+        <span class="po-number">${escapeHtml(poNum)}</span>
+      </div>
+    </div>
+    <div class="po-top-right">
+      <table class="kv">
+        <tr><th>Issue date</th><td>${escapeHtml(issuedStr)}</td></tr>
+        <tr><th>Currency</th><td>USD</td></tr>
+        <tr><th>Requested delivery</th><td>${escapeHtml(deliveryStr)} <span class="hint">(EOM)</span></td></tr>
+        <tr><th>Payment terms</th><td>Net 30</td></tr>
+      </table>
     </div>
   </header>
-  <div class="grid-2">
-    <div class="vendor-box">
-      <div class="lbl">Vendor</div>
-      <strong>${escapeHtml(group.vendorName)}</strong><br/>
-      ${escapeHtml(group.vendorCountry)}
+  <p class="buyer-legal">${escapeHtml(PO_COMPANY_NAME)}</p>
+  <div class="grid-3">
+    <div class="box">
+      <div class="lbl">Bill to</div>
+      <div class="box-body">${billToHtml}<br/>${escapeHtml(PO_BUYER_PHONE)}<br/><a href="mailto:${escapeHtml(PO_BUYER_EMAIL)}">${escapeHtml(PO_BUYER_EMAIL)}</a></div>
     </div>
-    <div class="vendor-box right">
-      <div class="lbl">PO details</div>
-      <strong>PO #</strong> ${escapeHtml(poNum)}<br/>
-      <strong>Date</strong> ${escapeHtml(issuedStr)}<br/>
-      <strong>Requested delivery</strong> End of month
+    <div class="box">
+      <div class="lbl">Ship to</div>
+      <div class="box-body">${shipToHtml}</div>
+    </div>
+    <div class="box">
+      <div class="lbl">Supplier (vendor)</div>
+      <div class="box-body"><strong>${escapeHtml(group.vendorName)}</strong><br/>${escapeHtml(group.vendorCountry)}<br/><span class="meta-line">Vendor code: ${escapeHtml(vc)}</span></div>
     </div>
   </div>
+  <p class="intro">Please supply the following materials in accordance with the quantities and unit pricing below. Reference this PO number on all order acknowledgments, packing slips, and invoices.</p>
   <table class="po-table">
     <thead>
-      <tr><th>#</th><th>Item / description</th><th>Body part</th><th class="num">Qty</th><th class="num">Unit (USD)</th><th class="num">Ext. (USD)</th></tr>
+      <tr><th class="num">#</th><th>Description</th><th>Category</th><th class="num">Qty</th><th class="cen">UOM</th><th class="num">Unit price</th><th class="num">Amount</th></tr>
     </thead>
     <tbody>${tableRows}</tbody>
   </table>
-  <div class="total-row"><span>Subtotal</span><strong>$${subtotal.toFixed(2)} USD</strong></div>
-  <p class="fine">Terms: Net 30 unless otherwise agreed. Questions: procurement@optidoll.example</p>
-  <div class="sig">Authorized signature: _____________________________ <span class="date">Date: ____________</span></div>
+  <div class="totals">
+    <table class="totals-inner">
+      <tr><td>Subtotal</td><td class="num">$${subtotal.toFixed(2)}</td></tr>
+      <tr><td>Estimated tax <span class="hint">(if applicable)</span></td><td class="num">$${taxAmount.toFixed(2)}</td></tr>
+      <tr class="grand"><td><strong>Total (USD)</strong></td><td class="num"><strong>$${grandTotal.toFixed(2)}</strong></td></tr>
+    </table>
+  </div>
+  <div class="terms-block">
+    <div class="lbl">Terms &amp; conditions</div>
+    <p class="terms">${escapeHtml(PO_TERMS_TEXT)}</p>
+  </div>
+  <div class="sig-grid">
+    <div class="sig-cell"><span class="lbl">Authorized buyer</span><div class="sig-line"></div><span class="sig-hint">Name &amp; title</span></div>
+    <div class="sig-cell"><span class="lbl">Date</span><div class="sig-line"></div></div>
+  </div>
+  <p class="footer-note">Questions regarding this purchase order: ${escapeHtml(PO_BUYER_EMAIL)} · ${escapeHtml(PO_BUYER_PHONE)}</p>
 </section>`;
   });
 
-  if (!pagesHtml.trim()) {
-    w.close();
-    return false;
-  }
-
-  w.document.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Purchase Orders — ${escapeHtml(PO_COMPANY_NAME)}</title>
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Purchase Orders — ${escapeHtml(PO_COMPANY_NAME)}</title>
 <style>
-  @page { margin: 0.6in; }
+  @page { margin: 0.55in; }
   * { box-sizing: border-box; }
-  body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; color: #0f172a; background: #f8fafc; }
-  .po-sheet { background: #fff; max-width: 900px; margin: 0 auto 2rem; padding: 1.25rem 1.5rem 2rem; box-shadow: 0 4px 24px rgba(15,23,42,0.08); page-break-after: always; }
+  body { font-family: "Segoe UI", system-ui, -apple-system, sans-serif; margin: 0; color: #0f172a; background: #f1f5f9; font-size: 14px; line-height: 1.45; }
+  .po-sheet { background: #fff; max-width: 920px; margin: 0 auto 1.75rem; padding: 1.35rem 1.6rem 1.75rem; box-shadow: 0 2px 16px rgba(15,23,42,0.07); page-break-after: always; border: 1px solid #e2e8f0; }
   .po-sheet:last-child { page-break-after: auto; margin-bottom: 0; }
-  .po-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; border-bottom: 2px solid #253746; padding-bottom: 0.85rem; margin-bottom: 1rem; }
-  .logo { max-height: 52px; width: auto; display: block; }
-  .title-block h1 { margin: 0; font-size: 1.35rem; font-weight: 800; color: #253746; letter-spacing: 0.02em; }
-  .co { margin: 0.25rem 0 0; font-size: 0.88rem; color: #64748b; font-weight: 600; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem; }
-  .vendor-box { font-size: 0.9rem; line-height: 1.45; }
-  .vendor-box.right { text-align: right; }
-  .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 0.35rem; }
-  .po-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-  .po-table th, .po-table td { border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; vertical-align: top; }
-  .po-table th { background: #f1f5f9; font-weight: 700; color: #334155; }
+  .po-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.25rem; border-bottom: 3px solid #1e3a5f; padding-bottom: 1rem; margin-bottom: 1rem; }
+  .po-top-left { display: flex; align-items: flex-end; gap: 1.25rem; flex-wrap: wrap; }
+  .logo { max-height: 48px; width: auto; display: block; }
+  .doc-id { display: flex; flex-direction: column; gap: 0.15rem; }
+  .doc-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em; color: #64748b; font-weight: 700; }
+  .po-number { font-size: 1.35rem; font-weight: 800; color: #1e3a5f; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+  .po-top-right .kv { border-collapse: collapse; font-size: 0.82rem; }
+  .po-top-right .kv th, .po-top-right .kv td { padding: 3px 0 3px 12px; text-align: left; vertical-align: top; }
+  .po-top-right .kv th { color: #64748b; font-weight: 600; white-space: nowrap; }
+  .buyer-legal { margin: 0 0 0.85rem; font-size: 0.95rem; font-weight: 700; color: #334155; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.85rem; margin-bottom: 1rem; }
+  @media print { .grid-3 { grid-template-columns: 1fr 1fr 1fr; } }
+  .box { border: 1px solid #e2e8f0; border-radius: 4px; padding: 0.65rem 0.75rem; background: #fafafa; min-height: 6.5rem; }
+  .box-body { font-size: 0.86rem; color: #1e293b; }
+  .box-body a { color: #1e3a5f; text-decoration: none; }
+  .lbl { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; font-weight: 700; margin-bottom: 0.35rem; }
+  .meta-line { font-size: 0.8rem; color: #475569; }
+  .intro { font-size: 0.84rem; color: #475569; margin: 0 0 0.75rem; }
+  .hint { font-size: 0.78rem; color: #94a3b8; font-weight: 400; }
+  .po-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+  .po-table th, .po-table td { border: 1px solid #cbd5e1; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .po-table th { background: #e8eef5; font-weight: 700; color: #1e293b; }
   .po-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .total-row { display: flex; justify-content: flex-end; align-items: baseline; gap: 1.5rem; margin-top: 1rem; font-size: 1.05rem; }
-  .fine { font-size: 0.78rem; color: #64748b; margin: 1.25rem 0 0.5rem; }
-  .sig { margin-top: 1.5rem; font-size: 0.88rem; color: #334155; }
-  .sig .date { margin-left: 2rem; }
-</style></head><body>${pagesHtml}</body></html>`);
+  .po-table .cen { text-align: center; }
+  .totals { display: flex; justify-content: flex-end; margin-top: 0.85rem; }
+  .totals-inner { border-collapse: collapse; min-width: 280px; font-size: 0.9rem; }
+  .totals-inner td { padding: 6px 10px; border: 1px solid #e2e8f0; }
+  .totals-inner td.num { text-align: right; font-variant-numeric: tabular-nums; background: #fff; }
+  .totals-inner tr.grand td { background: #f1f5f9; border-top: 2px solid #1e3a5f; }
+  .terms-block { margin-top: 1.15rem; padding-top: 0.85rem; border-top: 1px solid #e2e8f0; }
+  .terms { margin: 0.35rem 0 0; font-size: 0.78rem; color: #475569; line-height: 1.5; }
+  .sig-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-top: 1.35rem; }
+  .sig-cell .sig-line { border-bottom: 1px solid #334155; min-height: 2.25rem; margin-top: 0.25rem; }
+  .sig-hint { font-size: 0.72rem; color: #94a3b8; }
+  .footer-note { margin: 1.25rem 0 0; font-size: 0.75rem; color: #64748b; text-align: center; }
+</style></head><body>${pagesHtml}</body></html>`;
+}
+
+/** @returns {boolean} false if pop-up blocked */
+function openHtmlDocumentInNewTab(html) {
+  if (!html) return false;
+  const w = window.open("", "_blank", "noopener,noreferrer");
+  if (!w) return false;
+  w.document.write(html);
   w.document.close();
   return true;
 }
@@ -967,6 +2079,30 @@ function openPurchaseOrdersPrint(vendorGroups, logoSrc) {
 const INVENTORY_FALLBACK_ROWS = [
   { id: 1, part: "Arm Deep", available_qty: 184, reorder_point_qty: 77, risk: "yellow" },
   { id: 2, part: "Eyes Blue", available_qty: 216, reorder_point_qty: 93, risk: "green" },
+  {
+    id: 3,
+    part: 92001,
+    part_detail: { id: 92001, part_name: "Leg Deep", part_type: "leg" },
+    available_qty: 216,
+    reorder_point_qty: 93,
+    risk: "yellow",
+  },
+  {
+    id: 4,
+    part: 92002,
+    part_detail: { id: 92002, part_name: "Leg Light", part_type: "leg" },
+    available_qty: 220,
+    reorder_point_qty: 95,
+    risk: "green",
+  },
+  {
+    id: 5,
+    part: 92003,
+    part_detail: { id: 92003, part_name: "Leg Medium", part_type: "leg" },
+    available_qty: 224,
+    reorder_point_qty: 97,
+    risk: "green",
+  },
 ];
 
 /** Supplier-part rows aligned by part name with {@link INVENTORY_FALLBACK_ROWS} when API is offline. */
@@ -990,6 +2126,36 @@ const SUPPLIER_PARTS_FALLBACK = [
     tariff_rate: "0.03",
     part_detail: { id: 91002, part_name: "Eyes Blue", part_type: "eyes" },
     supplier_detail: { supplier_code: "SUP-EYE-VN", supplier_name: "Vietnam Optics Collective", country: "Vietnam" },
+  },
+  {
+    id: 90003,
+    part: 92001,
+    is_primary: true,
+    base_cost: "1.72",
+    shipping_cost_per_unit: "0.28",
+    tariff_rate: "0.04",
+    part_detail: { id: 92001, part_name: "Leg Deep", part_type: "leg" },
+    supplier_detail: { supplier_code: "SUP-LIMB-MX", supplier_name: "Monterrey Limb Works", country: "Mexico" },
+  },
+  {
+    id: 90004,
+    part: 92002,
+    is_primary: true,
+    base_cost: "1.68",
+    shipping_cost_per_unit: "0.26",
+    tariff_rate: "0.04",
+    part_detail: { id: 92002, part_name: "Leg Light", part_type: "leg" },
+    supplier_detail: { supplier_code: "SUP-LIMB-MX", supplier_name: "Monterrey Limb Works", country: "Mexico" },
+  },
+  {
+    id: 90005,
+    part: 92003,
+    is_primary: true,
+    base_cost: "1.70",
+    shipping_cost_per_unit: "0.27",
+    tariff_rate: "0.04",
+    part_detail: { id: 92003, part_name: "Leg Medium", part_type: "leg" },
+    supplier_detail: { supplier_code: "SUP-LIMB-MX", supplier_name: "Monterrey Limb Works", country: "Mexico" },
   },
 ];
 
@@ -1467,6 +2633,9 @@ function Inventory() {
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [reorderPlanOpen, setReorderPlanOpen] = useState(false);
   const [reorderLines, setReorderLines] = useState([]);
+  const [poPreviewOpen, setPoPreviewOpen] = useState(false);
+  const [poPreviewHtml, setPoPreviewHtml] = useState("");
+  const poPreviewFrameRef = useRef(null);
 
   const sortedInventoryRows = useMemo(() => [...rows].sort(compareInventorySnapshotRows), [rows]);
 
@@ -1525,12 +2694,60 @@ function Inventory() {
       return;
     }
     const logoSrc = `${window.location.origin}${import.meta.env.BASE_URL}optidoll-logo-premium.svg`;
-    const ok = openPurchaseOrdersPrint(priced, logoSrc);
-    if (!ok) {
-      showSnackbar("Allow pop-ups to open printable purchase orders.", "warning");
-    } else {
-      showSnackbar("Purchase orders opened in a new tab — print or Save as PDF per vendor page.", "success");
+    const docHtml = buildPurchaseOrdersDocumentHtml(priced, logoSrc);
+    if (!docHtml) {
+      showSnackbar("Could not build purchase order documents.", "warning");
+      return;
     }
+    setPoPreviewHtml(docHtml);
+    setPoPreviewOpen(true);
+    showSnackbar(
+      `Purchase orders from the current plan are shown below (${formatPoDateCompact()}-# per vendor). Use Print or open in a new tab to save as PDF.`,
+      "success"
+    );
+  };
+
+  const exportPurchaseOrdersForVendor = (vendorGroup) => {
+    let lines = reorderLines;
+    if (!lines.length) {
+      lines = buildEndOfMonthReorderLines(sortedInventoryRows, partLinks);
+      setReorderLines(lines);
+    }
+    const match = groupReorderLinesByVendor(lines).find((g) => vendorGroupsEquivalent(g, vendorGroup));
+    if (!match?.hasVendor) {
+      showSnackbar("Assign a supplier to export a purchase order for this vendor.", "warning");
+      return;
+    }
+    if (!match.lines.some((l) => l.hasVendor && l.unitCost != null)) {
+      showSnackbar("No priced lines for this vendor. Link parts and costs in Suppliers.", "warning");
+      return;
+    }
+    const logoSrc = `${window.location.origin}${import.meta.env.BASE_URL}optidoll-logo-premium.svg`;
+    const docHtml = buildPurchaseOrdersDocumentHtml([match], logoSrc);
+    if (!docHtml) {
+      showSnackbar("Could not build this purchase order.", "warning");
+      return;
+    }
+    setPoPreviewHtml(docHtml);
+    setPoPreviewOpen(true);
+    showSnackbar(`Purchase order for ${match.vendorName} is shown below — print or save as PDF.`, "success");
+  };
+
+  const printPoPreview = () => {
+    poPreviewFrameRef.current?.contentWindow?.focus();
+    poPreviewFrameRef.current?.contentWindow?.print();
+  };
+
+  const openPoPreviewInNewTab = () => {
+    const ok = openHtmlDocumentInNewTab(poPreviewHtml);
+    if (!ok) {
+      showSnackbar("Allow pop-ups to open the purchase order in a new tab.", "warning");
+    }
+  };
+
+  const closePoPreview = () => {
+    setPoPreviewOpen(false);
+    setPoPreviewHtml("");
   };
 
   const openSafetyPanel = () => {
@@ -1632,6 +2849,37 @@ function Inventory() {
           { label: "Export Purchase Orders", variant: "outlined", color: "secondary", onClick: exportPurchaseOrders },
         ]}
       />
+      <Dialog
+        open={poPreviewOpen}
+        onClose={closePoPreview}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{ sx: { height: "min(90vh, 920px)", maxHeight: "95vh", display: "flex", flexDirection: "column" } }}
+      >
+        <DialogTitle sx={{ flexShrink: 0 }}>Purchase orders — preview</DialogTitle>
+        <DialogContent sx={{ p: 0, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          {poPreviewHtml ? (
+            <Box
+              component="iframe"
+              ref={poPreviewFrameRef}
+              title="Purchase orders"
+              srcDoc={poPreviewHtml}
+              sx={{ flex: 1, width: "100%", border: 0, minHeight: 480, bgcolor: "#f1f5f9" }}
+            />
+          ) : null}
+        </DialogContent>
+        <DialogActions sx={{ flexShrink: 0, flexWrap: "wrap", gap: 1 }}>
+          <Button type="button" startIcon={<PrintOutlinedIcon />} variant="contained" color="primary" onClick={printPoPreview}>
+            Print
+          </Button>
+          <Button type="button" startIcon={<OpenInNewIcon />} variant="outlined" onClick={openPoPreviewInNewTab}>
+            Open in new tab
+          </Button>
+          <Button type="button" onClick={closePoPreview}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={reorderPlanOpen} onClose={() => setReorderPlanOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>Master reorder plan (by vendor)</DialogTitle>
         <DialogContent dividers>
@@ -1644,11 +2892,30 @@ function Inventory() {
           ) : (
             reorderByVendor.map((group) => (
               <Box key={`${group.vendorName}-${group.vendorCountry}-${group.supplierCode}`} sx={{ mb: 3 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
-                  {group.vendorName}
-                  {group.vendorCountry && group.vendorCountry !== "—" ? ` · ${group.vendorCountry}` : ""}
-                  {!group.hasVendor ? " (assign supplier)" : ""}
-                </Typography>
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  spacing={1}
+                  sx={{ mb: 1, flexWrap: "wrap", gap: 1 }}
+                >
+                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                    {group.vendorName}
+                    {group.vendorCountry && group.vendorCountry !== "—" ? ` · ${group.vendorCountry}` : ""}
+                    {!group.hasVendor ? " (assign supplier)" : ""}
+                  </Typography>
+                  <Button
+                    type="button"
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    startIcon={<FileDownloadOutlinedIcon />}
+                    disabled={!group.hasVendor || !group.lines.some((l) => l.hasVendor && l.unitCost != null)}
+                    onClick={() => exportPurchaseOrdersForVendor(group)}
+                  >
+                    Export PO
+                  </Button>
+                </Stack>
                 <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
                     <TableHead>
@@ -1872,44 +3139,200 @@ function Orders() {
   );
 }
 
+/** Target supply base shown on Supplier Risk (by body group). Same names as seed SUP_RISK_* vendors. */
+const SUPPLIER_RISK_BY_CATEGORY = [
+  {
+    label: "Arm",
+    suppliers: [
+      { name: "HiSu", country: "China" },
+      { name: "IndiaSilicone", country: "India" },
+    ],
+  },
+  {
+    label: "Eyes",
+    suppliers: [
+      { name: "EyeSan", country: "Japan" },
+      { name: "E-Toys", country: "Pakistan" },
+      { name: "BeautyEyes", country: "Canada" },
+      { name: "IrisStyles", country: "USA" },
+    ],
+  },
+  {
+    label: "Head",
+    suppliers: [
+      { name: "SilicaForms", country: "UK" },
+      { name: "E-Toys", country: "Pakistan" },
+    ],
+  },
+  {
+    label: "Leg",
+    suppliers: [
+      { name: "HiSu", country: "China" },
+      { name: "IndiaSilicone", country: "India" },
+      { name: "E-Toys", country: "Pakistan" },
+    ],
+  },
+  {
+    label: "Hair",
+    suppliers: [
+      { name: "PolySyth", country: "Indonesia" },
+      { name: "HairySan", country: "Japan" },
+      { name: "HiSu", country: "China" },
+      { name: "E-Toys", country: "Pakistan" },
+    ],
+  },
+  {
+    label: "Torso",
+    suppliers: [{ name: "SoftBody", country: "USA" }],
+  },
+  {
+    label: "Box",
+    suppliers: [
+      { name: "BoxingDay", country: "UK" },
+      { name: "CanadaContainers", country: "Canada" },
+      { name: "BoXy", country: "USA" },
+      { name: "BoxMe", country: "USA" },
+    ],
+  },
+];
+
+function uniqueSupplierRiskMockTableRows() {
+  const seen = new Set();
+  const out = [];
+  for (const cat of SUPPLIER_RISK_BY_CATEGORY) {
+    for (const s of cat.suppliers) {
+      const key = `${s.name}|${s.country}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push([s.name, s.country, "Current", "Review", "Review"]);
+    }
+  }
+  return out;
+}
+
 function Suppliers() {
   const [rows, setRows] = useState([]);
   const [partLinks, setPartLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState("live");
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [frequentOpen, setFrequentOpen] = useState(false);
+  const [backupOpen, setBackupOpen] = useState(false);
+
+  const refreshSupplierData = useCallback(async () => {
+    try {
+      const [suppliersData, linksData] = await Promise.all([getSuppliers(), getSupplierParts()]);
+      setRows(suppliersData.results || suppliersData);
+      const rawLinks = linksData.results || linksData;
+      setPartLinks(Array.isArray(rawLinks) ? [...rawLinks].sort(compareSupplierPartLinks) : []);
+      setSource("live");
+    } catch {
+      setRows(uniqueSupplierRiskMockTableRows());
+      setPartLinks([]);
+      setSource("mock");
+    }
+  }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     Promise.all([getSuppliers(), getSupplierParts()])
       .then(([suppliersData, linksData]) => {
+        if (cancelled) return;
         setRows(suppliersData.results || suppliersData);
         const rawLinks = linksData.results || linksData;
         setPartLinks(Array.isArray(rawLinks) ? [...rawLinks].sort(compareSupplierPartLinks) : []);
         setSource("live");
       })
       .catch(() => {
-        setRows([
-          ["SUP-MEX-HEAD", "Mexico", "Current", "Fast", "Low"],
-          ["SUP-VNM-HAIR", "Vietnam", "Current", "Medium", "Medium"],
-        ]);
+        if (cancelled) return;
+        setRows(uniqueSupplierRiskMockTableRows());
         setPartLinks([]);
         setSource("mock");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const linksBySupplierId = useMemo(() => {
+    const m = new Map();
+    for (const l of partLinks) {
+      const id = l.supplier;
+      if (id == null) continue;
+      if (!m.has(id)) m.set(id, []);
+      m.get(id).push(l);
+    }
+    return m;
+  }, [partLinks]);
+
+  const allSuppliersTableRows = useMemo(() => {
+    if (!rows.length) return [];
+    if (Array.isArray(rows[0])) return rows;
+    return rows.map((s) => {
+      const links = linksBySupplierId.get(s.id) ?? [];
+      const leadCell = source === "live" ? leadTimeRiskReviewCell(links) : "Review";
+      const tariffCell = source === "live" ? tariffRiskReviewCell(links) : "Review";
+      return [s.supplier_name, s.country, s.cpsia_current ? "Current" : "Review", leadCell, tariffCell];
+    });
+  }, [rows, linksBySupplierId, source]);
 
   return (
     <Page title="Supplier Risk" subtitle="Assess continuity risk, compliance posture, and backup options.">
+      <SupplierCompareDialog
+        open={compareOpen}
+        onClose={() => setCompareOpen(false)}
+        source={source}
+        suppliers={Array.isArray(rows[0]) ? [] : rows}
+        linksBySupplierId={linksBySupplierId}
+      />
+      <FrequentSupplierDialog open={frequentOpen} onClose={() => setFrequentOpen(false)} />
+      <AddBackupSupplierDialog
+        open={backupOpen}
+        onClose={() => setBackupOpen(false)}
+        onCreated={refreshSupplierData}
+        source={source}
+      />
       {source === "mock" ? <Alert severity="warning" sx={{ mb: 2 }}>Suppliers API unavailable. Showing fallback vendors.</Alert> : null}
-      <ActionRow actions={["Compare Suppliers", "Switch Supplier", "Add Backup Supplier"]} />
+      <ActionRow
+        actions={[
+          { label: "Compare Suppliers", onClick: () => setCompareOpen(true) },
+          { label: "Frequent Supplier", onClick: () => setFrequentOpen(true) },
+          { label: "Add Backup Supplier", onClick: () => setBackupOpen(true) },
+        ]}
+      />
+      <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
+        Supply base by category
+      </Typography>
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        {SUPPLIER_RISK_BY_CATEGORY.map((cat) => (
+          <Grid key={cat.label} size={{ xs: 12, sm: 6, md: 4 }}>
+            <CardBox
+              title={`${cat.label} ${cat.label === "Torso" ? "Supplier" : "Suppliers"}`}
+            >
+              <Stack component="ul" sx={{ m: 0, pl: 2.25, typography: "body2" }}>
+                {cat.suppliers.map((s) => (
+                  <li key={`${cat.label}-${s.name}-${s.country}`}>
+                    <strong>{s.name}</strong>
+                    <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
+                      · {s.country}
+                    </Typography>
+                  </li>
+                ))}
+              </Stack>
+            </CardBox>
+          </Grid>
+        ))}
+      </Grid>
+      <Typography variant="subtitle1" sx={{ fontWeight: 800, mb: 1 }}>
+        All Suppliers (API)
+      </Typography>
       <SimpleTable
         columns={["Supplier", "Country", "Certification", "Lead Time Risk", "Tariff Risk"]}
-        rows={Array.isArray(rows[0]) ? rows : rows.map((s) => [
-          s.supplier_name,
-          s.country,
-          s.cpsia_current ? "Current" : "Review",
-          "Review",
-          "Review",
-        ])}
+        rows={allSuppliersTableRows}
         loading={loading}
       />
       {source === "live" && partLinks.length > 0 ? (
@@ -2433,6 +3856,65 @@ function ActionRow({ actions }) {
   );
 }
 
+/** Rich cell: `{ display, sortValue?, searchText? }` for custom render + sort/search. */
+function tableCellSearchText(cell) {
+  if (cell != null && typeof cell === "object" && !Array.isArray(cell) && "searchText" in cell) {
+    return String(cell.searchText ?? "");
+  }
+  return String(cell ?? "");
+}
+
+function tableCellSortKey(cell) {
+  if (cell != null && typeof cell === "object" && !Array.isArray(cell) && "sortValue" in cell) {
+    return String(cell.sortValue ?? "");
+  }
+  return String(cell ?? "");
+}
+
+function formatPrimitiveTableCell(value, columnName) {
+  if (value === null || value === undefined) return "-";
+
+  const column = String(columnName || "").toLowerCase();
+  const num = Number(value);
+  const isNumber = !Number.isNaN(num) && value !== "";
+
+  if ((column.includes("rate") || column.includes("accuracy") || column.includes("achievement")) && isNumber) {
+    const pct = num <= 1 ? num * 100 : num;
+    return `${pct.toFixed(1)}%`;
+  }
+
+  if (column.includes("risk")) {
+    const riskLabel = String(value || "review").toUpperCase();
+    return <Chip size="small" color={riskToColor(value)} label={riskLabel} />;
+  }
+
+  if (column.includes("delta") && isNumber) {
+    const display = `${num > 0 ? "+" : ""}${num}`;
+    const tone = num < 0 ? "error.main" : num === 0 ? "warning.main" : "success.main";
+    return <Typography sx={{ fontWeight: 700, color: tone }}>{display}</Typography>;
+  }
+
+  if ((column.includes("cost") || column.includes("price") || column.includes("amount") || column.includes("value")) && isNumber) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
+  }
+
+  if (column.includes("date") || column.includes("period")) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+    }
+  }
+
+  return String(value);
+}
+
+function renderTableCell(cell, columnName) {
+  if (cell != null && typeof cell === "object" && !Array.isArray(cell) && "display" in cell) {
+    return cell.display;
+  }
+  return formatPrimitiveTableCell(cell, columnName);
+}
+
 function SimpleTable({ columns, rows, loading = false }) {
   const [searchText, setSearchText] = useState("");
   const [sortConfig, setSortConfig] = useState({ index: 0, direction: "asc" });
@@ -2442,7 +3924,7 @@ function SimpleTable({ columns, rows, loading = false }) {
   const filteredRows = useMemo(
     () =>
       rows.filter((row) =>
-        row.some((cell) => String(cell).toLowerCase().includes(searchText.trim().toLowerCase()))
+        row.some((cell) => tableCellSearchText(cell).toLowerCase().includes(searchText.trim().toLowerCase()))
       ),
     [rows, searchText]
   );
@@ -2450,8 +3932,8 @@ function SimpleTable({ columns, rows, loading = false }) {
   const sortedRows = useMemo(() => {
     const { index, direction } = sortConfig;
     return [...filteredRows].sort((a, b) => {
-      const left = String(a[index] ?? "");
-      const right = String(b[index] ?? "");
+      const left = tableCellSortKey(a[index]);
+      const right = tableCellSortKey(b[index]);
       const comparison = left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
       return direction === "asc" ? comparison : -comparison;
     });
@@ -2469,43 +3951,6 @@ function SimpleTable({ columns, rows, loading = false }) {
       index,
       direction: current.index === index && current.direction === "asc" ? "desc" : "asc",
     }));
-  };
-
-  const formatCell = (value, columnName) => {
-    if (value === null || value === undefined) return "-";
-
-    const column = String(columnName || "").toLowerCase();
-    const num = Number(value);
-    const isNumber = !Number.isNaN(num) && value !== "";
-
-    if ((column.includes("rate") || column.includes("accuracy") || column.includes("achievement")) && isNumber) {
-      const pct = num <= 1 ? num * 100 : num;
-      return `${pct.toFixed(1)}%`;
-    }
-
-    if (column.includes("risk")) {
-      const riskLabel = String(value || "review").toUpperCase();
-      return <Chip size="small" color={riskToColor(value)} label={riskLabel} />;
-    }
-
-    if (column.includes("delta") && isNumber) {
-      const display = `${num > 0 ? "+" : ""}${num}`;
-      const tone = num < 0 ? "error.main" : num === 0 ? "warning.main" : "success.main";
-      return <Typography sx={{ fontWeight: 700, color: tone }}>{display}</Typography>;
-    }
-
-    if ((column.includes("cost") || column.includes("price") || column.includes("amount") || column.includes("value")) && isNumber) {
-      return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(num);
-    }
-
-    if (column.includes("date") || column.includes("period")) {
-      const date = new Date(value);
-      if (!Number.isNaN(date.getTime())) {
-        return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
-      }
-    }
-
-    return String(value);
   };
 
   return (
@@ -2563,7 +4008,7 @@ function SimpleTable({ columns, rows, loading = false }) {
                   {pagedRows.map((row, idx) => (
                     <TableRow key={`${idx}-${String(row[0] ?? "")}`} hover>
                       {row.map((cell, i) => (
-                        <TableCell key={i}>{formatCell(cell, columns[i])}</TableCell>
+                        <TableCell key={i}>{renderTableCell(cell, columns[i])}</TableCell>
                       ))}
                     </TableRow>
                   ))}
