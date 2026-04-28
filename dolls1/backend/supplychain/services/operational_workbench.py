@@ -48,14 +48,14 @@ def _quality_pareto_from_csv() -> list[dict]:
             except (TypeError, ValueError):
                 continue
     items = sorted(buckets.items(), key=lambda x: -x[1])
-    return [{"label": k, "count": v} for k, v in items[:12]]
+    return [{"label": k, "count": v} for k, v in items[:16]]
 
 
 def _defect_pareto_db() -> list[dict]:
     rows = (
         DefectEvent.objects.values("defect_type__defect_name")
         .annotate(count=Sum("quantity"))
-        .order_by("-count")[:12]
+        .order_by("-count")[:16]
     )
     out = [{"label": r["defect_type__defect_name"] or "—", "count": r["count"] or 0} for r in rows]
     return [x for x in out if x["count"] > 0]
@@ -66,7 +66,7 @@ def _root_causes_db() -> list[dict]:
         DefectEvent.objects.filter(root_cause__isnull=False)
         .values("root_cause__cause_name")
         .annotate(count=Sum("quantity"))
-        .order_by("-count")[:10]
+        .order_by("-count")[:14]
     )
     return [{"label": r["root_cause__cause_name"] or "—", "count": r["count"] or 0} for r in rows if r["count"]]
 
@@ -350,4 +350,4 @@ def _root_causes_from_csv() -> list[dict]:
             except (TypeError, ValueError):
                 continue
     items = sorted(buckets.items(), key=lambda x: -x[1])
-    return [{"label": k, "count": v} for k, v in items[:8]]
+    return [{"label": k, "count": v} for k, v in items[:14]]

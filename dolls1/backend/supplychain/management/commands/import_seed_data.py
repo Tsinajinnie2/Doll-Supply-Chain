@@ -1,10 +1,14 @@
 import csv
 import zipfile
+from calendar import monthrange
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from decimal import Decimal
+import random
 
 from django.core.management.base import BaseCommand
+from django.db.models import Sum
+from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
 from supplychain.models import (
@@ -22,6 +26,7 @@ from supplychain.models import (
     RootCauseCode,
     ProcessStep,
     CapaCase,
+    DefectEvent,
 )
 
 
@@ -35,21 +40,35 @@ class Command(BaseCommand):
             default="seed_data/dolls1_seed_csv.zip",
             help="Path to dolls1 CSV ZIP file",
         )
+        parser.add_argument(
+            "--csv-folder",
+            type=str,
+            default="",
+            help="Optional folder of CSV files (relative to cwd or absolute). When set, skips ZIP extraction.",
+        )
 
     def handle(self, *args, **options):
-        zip_path = Path(options["zip"])
+        csv_folder_opt = (options.get("csv_folder") or "").strip()
+        if csv_folder_opt:
+            extract_dir = Path(csv_folder_opt)
+            if not extract_dir.is_dir():
+                self.stderr.write(self.style.ERROR(f"CSV folder not found or not a directory: {extract_dir}"))
+                return
+            self.stdout.write(self.style.SUCCESS(f"Using CSV folder {extract_dir.resolve()}"))
+        else:
+            zip_path = Path(options["zip"])
 
-        if not zip_path.exists():
-            self.stderr.write(self.style.ERROR(f"File not found: {zip_path}"))
-            return
+            if not zip_path.exists():
+                self.stderr.write(self.style.ERROR(f"File not found: {zip_path}"))
+                return
 
-        extract_dir = Path("seed_data/extracted")
-        extract_dir.mkdir(parents=True, exist_ok=True)
+            extract_dir = Path("seed_data/extracted")
+            extract_dir.mkdir(parents=True, exist_ok=True)
 
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(extract_dir)
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                zip_ref.extractall(extract_dir)
 
-        self.stdout.write(self.style.SUCCESS(f"Extracted CSV files to {extract_dir}"))
+            self.stdout.write(self.style.SUCCESS(f"Extracted CSV files to {extract_dir}"))
 
         self.import_product_options(extract_dir)
         self.import_parts(extract_dir)
@@ -62,7 +81,9 @@ class Command(BaseCommand):
         self.import_forecast_parameters(extract_dir)
         self.import_doll_unit_sales_monthly(extract_dir)
         self.import_six_sigma_basics()
+        self.import_quality_defect_events(extract_dir)
         self.import_capa_cases(extract_dir)
+        self.ensure_customer_orders_for_quality_balance()
 
         self.stdout.write(self.style.SUCCESS("Seed import completed."))
 
@@ -274,25 +295,39 @@ class Command(BaseCommand):
         rows = self.read_csv(folder, "orders_history.csv")
         imported = 0
 
-        for row in rows:
-            order_number = row.get("order_number")
+        for idx, row in enumerate(rows):
+            order_number = (row.get("order_number") or "").strip()
             if not order_number:
-                continue
+                om = self.to_date(row.get("order_month"))
+                skin = (row.get("skin_tone") or "ST").replace(" ", "")[:12]
+                season = (row.get("season_window") or "N")[:12].replace(" ", "")
+                order_number = f"HIST-{om.strftime('%Y%m%d') if om else '00000000'}-{skin}-{season}-{idx:04d}"
+
+            base_date = self.to_date(row.get("order_month"))
+            if base_date:
+                naive_od = datetime.combine(base_date, datetime.min.time()) + timedelta(hours=9)
+                order_dt = timezone.make_aware(naive_od, timezone.get_current_timezone())
+                shipped_dt = order_dt + timedelta(hours=30)
+                promised_dt = order_dt + timedelta(days=12)
+            else:
+                order_dt = timezone.now() - timedelta(days=30)
+                shipped_dt = order_dt + timedelta(hours=30)
+                promised_dt = order_dt + timedelta(days=12)
 
             CustomerOrder.objects.update_or_create(
                 order_number=order_number,
                 defaults={
-                    "order_date": self.to_datetime(row.get("order_date")) or datetime.now(),
-                    "promised_ship_by": self.to_datetime(row.get("promised_ship_by")),
-                    "shipped_at": self.to_datetime(row.get("shipped_at")),
-                    "skin_tone": row.get("skin_tone", ""),
-                    "face_shape": row.get("face_shape", ""),
-                    "haircut": row.get("haircut", ""),
-                    "hair_color": row.get("hair_color", ""),
-                    "eye_color": row.get("eye_color", ""),
-                    "outfit": row.get("outfit", ""),
-                    "glasses": row.get("glasses", ""),
-                    "status": row.get("status", "received"),
+                    "order_date": self.to_datetime(row.get("order_date")) or order_dt,
+                    "promised_ship_by": self.to_datetime(row.get("promised_ship_by")) or promised_dt,
+                    "shipped_at": self.to_datetime(row.get("shipped_at")) or shipped_dt,
+                    "skin_tone": row.get("skin_tone") or "medium",
+                    "face_shape": row.get("face_shape") or row.get("sample_face_shape") or "oval",
+                    "haircut": row.get("haircut") or row.get("sample_haircut") or "bob",
+                    "hair_color": row.get("hair_color") or row.get("sample_hair_color") or "brown",
+                    "eye_color": row.get("eye_color") or row.get("sample_eye_color") or "brown",
+                    "outfit": row.get("outfit") or row.get("sample_outfit") or "casual",
+                    "glasses": row.get("glasses") or row.get("sample_glasses") or "none",
+                    "status": row.get("status", "shipped"),
                     "is_custom_build": True,
                 },
             )
@@ -464,6 +499,12 @@ class Command(BaseCommand):
             ("packaging_error", "Packaging Error"),
             ("hair_detachment", "Hair Detachment"),
             ("torso_seam_defect", "Torso Seam Defect"),
+            ("paint_run", "Paint Run / Overspray"),
+            ("magnet_alignment", "Magnet Alignment"),
+            ("stitch_open", "Open Stitch / Seam"),
+            ("label_mismatch", "Label / SKU Mismatch"),
+            ("adhesive_bleed", "Adhesive Bleed"),
+            ("joint_play", "Joint Play / Loose Fit"),
         ]
 
         root_causes = [
@@ -477,6 +518,9 @@ class Command(BaseCommand):
             ("tool_jig_issue", "Tool or Jig Issue"),
             ("unclear_work_instruction", "Unclear Work Instruction"),
             ("shipping_damage", "Shipping Damage"),
+            ("material_batch", "Material Batch Variation"),
+            ("fixture_wear", "Fixture Wear / Wear-in Drift"),
+            ("env_control", "Environmental Control Gap"),
         ]
 
         process_steps = [
@@ -513,3 +557,117 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS("Imported Six Sigma baseline tables"))
+
+    def import_quality_defect_events(self, folder):
+        """Load quality_events.csv rows as DefectEvent (one row per monthly type rollup)."""
+        rows = self.read_csv(folder, "quality_events.csv")
+        if not rows:
+            self.stdout.write(self.style.WARNING("Missing quality_events.csv — skipped defect event import."))
+            return
+
+        defect_alias = {"wrongly_assembled": "wrong_assembly"}
+        deleted, _ = DefectEvent.objects.filter(notes__startswith="[seed-quality-events]").delete()
+        if deleted:
+            self.stdout.write(f"Cleared {deleted} prior seed-linked defect events")
+
+        bulk = []
+        skipped_type = 0
+        for i, row in enumerate(rows):
+            raw_code = (row.get("defect_type") or "").strip()
+            code = defect_alias.get(raw_code, raw_code)
+            defect_type = DefectType.objects.filter(defect_code=code).first()
+            if not defect_type:
+                skipped_type += 1
+                continue
+            rc_code = (row.get("root_cause_code") or "").strip()
+            root_cause = RootCauseCode.objects.filter(cause_code=rc_code).first()
+            ps_code = (row.get("process_step") or "").strip().lower()
+            process_step = ProcessStep.objects.filter(step_code=ps_code).first()
+            event_month = self.to_date(row.get("event_month"))
+            if event_month:
+                last_d = date(
+                    event_month.year,
+                    event_month.month,
+                    monthrange(event_month.year, event_month.month)[1],
+                )
+            else:
+                last_d = timezone.now().date()
+            qty = self.to_int(row.get("defect_count"), 0)
+            if qty <= 0:
+                continue
+            bulk.append(
+                DefectEvent(
+                    defect_date=last_d,
+                    defect_type=defect_type,
+                    root_cause=root_cause,
+                    process_step=process_step,
+                    quantity=qty,
+                    severity="minor",
+                    notes=f"[seed-quality-events] csv_row={i}",
+                )
+            )
+
+        DefectEvent.objects.bulk_create(bulk, batch_size=500)
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Imported quality defect events: {len(bulk)} DefectEvent rows (unknown defect_type rows skipped: {skipped_type})"
+            )
+        )
+
+    def ensure_customer_orders_for_quality_balance(self):
+        """
+        Keep shipped doll order count well above total defect units so yield, DPMO basis, and
+        configuration accuracy stay coherent with the seeded defect history.
+        """
+        defect_units = DefectEvent.objects.aggregate(s=Sum("quantity"))["s"] or 0
+        defect_units = int(defect_units)
+
+        CustomerOrder.objects.filter(order_number__startswith="SYN-Q-").delete()
+        total = CustomerOrder.objects.count()
+        target = min(28000, max(9000, defect_units * 18))
+        need = max(0, target - total)
+        if need == 0:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Customer orders {total} vs {defect_units} defect units — no SYN-Q-* placeholder orders added"
+                )
+            )
+            return
+
+        samples = [
+            ("ST1", "FACE1", "HC01", "HCL01", "EYE1", "OUT1", "GLS1"),
+            ("ST2", "FACE2", "HC02", "HCL02", "EYE2", "OUT2", "NONE"),
+            ("ST3", "FACE3", "HC04", "HCL04", "EYE3", "OUT3", "GLS2"),
+        ]
+        objs = []
+        for k in range(need):
+            skin, face, hc, hcl, eye, out, gls = samples[k % len(samples)]
+            day_off = random.randint(5, 520)
+            od = timezone.now() - timedelta(days=day_off)
+            od = od.replace(hour=10, minute=0, second=0, microsecond=0)
+            shipped_within = random.random() < 0.985
+            sh = od + timedelta(hours=22 if shipped_within else 72)
+            objs.append(
+                CustomerOrder(
+                    order_number=f"SYN-Q-{k + 1:08d}",
+                    order_date=od,
+                    promised_ship_by=od + timedelta(days=10),
+                    shipped_at=sh,
+                    skin_tone=skin,
+                    face_shape=face,
+                    haircut=hc,
+                    hair_color=hcl,
+                    eye_color=eye,
+                    outfit=out,
+                    glasses=gls,
+                    status="shipped",
+                    is_custom_build=True,
+                )
+            )
+        CustomerOrder.objects.bulk_create(objs, batch_size=800)
+        new_total = CustomerOrder.objects.count()
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Added {need} synthetic shipped orders (SYN-Q-*) — total orders {new_total}, defect units {defect_units}"
+            )
+        )

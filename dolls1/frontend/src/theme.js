@@ -39,6 +39,15 @@ export const theme = createTheme({
 
   typography: {
     fontFamily: `"Inter", "Segoe UI", "Roboto", "Arial", sans-serif`,
+    h3: {
+      fontWeight: 800,
+      letterSpacing: "-0.02em",
+    },
+    h4: {
+      fontWeight: 800,
+      letterSpacing: "-0.02em",
+      lineHeight: 1.2,
+    },
     h6: {
       fontWeight: 800,
       letterSpacing: "0.02em",
@@ -93,6 +102,20 @@ export const theme = createTheme({
         root: ({ theme }) => ({
           zIndex: theme.zIndex.modal + 50,
         }),
+      },
+    },
+    MuiAlert: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        head: {
+          fontWeight: 700,
+        },
       },
     },
   },

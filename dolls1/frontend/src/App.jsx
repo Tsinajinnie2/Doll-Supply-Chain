@@ -102,6 +102,14 @@ const TOOLTIP_DELAY_PROPS = {
   leaveTouchDelay: 900,
 };
 
+/** Shared card chrome for KPIs, section cards, and data tables (used across all pages). */
+const CARD_POLISH_SX = {
+  border: "1px solid rgba(15, 23, 42, 0.09)",
+  boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+};
+
+const PAGE_MAX_WIDTH_PX = 1280;
+
 const navItems = [
   ["Dashboard", "/"],
   ["Upload Data", "/upload"],
@@ -116,14 +124,14 @@ const navItems = [
 const mockSummary = {
   total_orders: 1240,
   shipped_orders: 1196,
-  on_time_48h_rate: 0.968,
+  on_time_48h_rate: 0.991,
   total_defects: 58,
   configuration_accuracy: 0.982,
   estimated_dpmo: 3900,
   inventory_records: 220,
   supplier_count: 24,
   recommendation_count: 42,
-  risk_level: "yellow",
+  risk_level: "green",
 };
 
 /** Matches `Part.PART_TYPES` ordering in Django — group parts consistently across pages. */
@@ -1234,49 +1242,75 @@ const MOCK_OPERATIONAL = {
   },
   forecast_parameters: [],
   daily_operations: [
-    { target_date: "2026-04-21", target_orders: 42, actual_orders: 40, target_assembled: 42, actual_assembled: 39, target_shipped: 42, actual_shipped: 38, backlog_qty: 11, on_time_ship_rate: 0.95, season_window: "Normal" },
-    { target_date: "2026-04-22", target_orders: 42, actual_orders: 44, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 41, backlog_qty: 12, on_time_ship_rate: 0.93, season_window: "Normal" },
-    { target_date: "2026-04-23", target_orders: 42, actual_orders: 41, target_assembled: 42, actual_assembled: 40, target_shipped: 42, actual_shipped: 39, backlog_qty: 14, on_time_ship_rate: 0.95, season_window: "Normal" },
-    { target_date: "2026-04-24", target_orders: 42, actual_orders: 45, target_assembled: 42, actual_assembled: 44, target_shipped: 42, actual_shipped: 42, backlog_qty: 15, on_time_ship_rate: 0.93, season_window: "Normal" },
-    { target_date: "2026-04-25", target_orders: 36, actual_orders: 34, target_assembled: 36, actual_assembled: 35, target_shipped: 36, actual_shipped: 33, backlog_qty: 16, on_time_ship_rate: 0.97, season_window: "Normal" },
-    { target_date: "2026-04-26", target_orders: 36, actual_orders: 35, target_assembled: 36, actual_assembled: 36, target_shipped: 36, actual_shipped: 34, backlog_qty: 17, on_time_ship_rate: 0.97, season_window: "Normal" },
-    { target_date: "2026-04-27", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 41, target_shipped: 42, actual_shipped: 40, backlog_qty: 18, on_time_ship_rate: 0.93, season_window: "Normal" },
+    { target_date: "2026-04-14", target_orders: 42, actual_orders: 42, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 10, on_time_ship_rate: 0.984, season_window: "Normal" },
+    { target_date: "2026-04-15", target_orders: 42, actual_orders: 41, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 9, on_time_ship_rate: 0.985, season_window: "Normal" },
+    { target_date: "2026-04-16", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 44, target_shipped: 42, actual_shipped: 43, backlog_qty: 9, on_time_ship_rate: 0.986, season_window: "Normal" },
+    { target_date: "2026-04-17", target_orders: 42, actual_orders: 42, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 44, backlog_qty: 8, on_time_ship_rate: 0.987, season_window: "Normal" },
+    { target_date: "2026-04-18", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 8, on_time_ship_rate: 0.988, season_window: "Normal" },
+    { target_date: "2026-04-19", target_orders: 42, actual_orders: 41, target_assembled: 42, actual_assembled: 42, target_shipped: 42, actual_shipped: 43, backlog_qty: 7, on_time_ship_rate: 0.989, season_window: "Normal" },
+    { target_date: "2026-04-20", target_orders: 42, actual_orders: 42, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 7, on_time_ship_rate: 0.99, season_window: "Normal" },
+    { target_date: "2026-04-21", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 6, on_time_ship_rate: 0.991, season_window: "Normal" },
+    { target_date: "2026-04-22", target_orders: 42, actual_orders: 41, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 6, on_time_ship_rate: 0.992, season_window: "Normal" },
+    { target_date: "2026-04-23", target_orders: 42, actual_orders: 42, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 5, on_time_ship_rate: 0.992, season_window: "Normal" },
+    { target_date: "2026-04-24", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 44, backlog_qty: 5, on_time_ship_rate: 0.993, season_window: "Normal" },
+    { target_date: "2026-04-25", target_orders: 42, actual_orders: 41, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 5, on_time_ship_rate: 0.994, season_window: "Normal" },
+    { target_date: "2026-04-26", target_orders: 42, actual_orders: 42, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 5, on_time_ship_rate: 0.995, season_window: "Normal" },
+    { target_date: "2026-04-27", target_orders: 42, actual_orders: 43, target_assembled: 42, actual_assembled: 43, target_shipped: 42, actual_shipped: 43, backlog_qty: 5, on_time_ship_rate: 0.996, season_window: "Normal" },
   ],
   weekly_operations: [
-    { week_start: "2026-04-06", week_end: "2026-04-12", target_orders: 294, actual_orders: 281, target_assembled: 294, actual_assembled: 276, target_shipped: 294, actual_shipped: 268, ending_backlog: 14, on_time_ship_rate: 0.955 },
-    { week_start: "2026-04-13", week_end: "2026-04-19", target_orders: 294, actual_orders: 288, target_assembled: 294, actual_assembled: 290, target_shipped: 294, actual_shipped: 285, ending_backlog: 16, on_time_ship_rate: 0.962 },
-    { week_start: "2026-04-20", week_end: "2026-04-26", target_orders: 294, actual_orders: 292, target_assembled: 294, actual_assembled: 291, target_shipped: 294, actual_shipped: 288, ending_backlog: 18, on_time_ship_rate: 0.959 },
+    { week_start: "2026-04-06", week_end: "2026-04-12", target_orders: 294, actual_orders: 292, target_assembled: 294, actual_assembled: 301, target_shipped: 294, actual_shipped: 299, ending_backlog: 12, on_time_ship_rate: 0.988 },
+    { week_start: "2026-04-13", week_end: "2026-04-19", target_orders: 294, actual_orders: 295, target_assembled: 294, actual_assembled: 302, target_shipped: 294, actual_shipped: 298, ending_backlog: 8, on_time_ship_rate: 0.991 },
+    { week_start: "2026-04-20", week_end: "2026-04-26", target_orders: 294, actual_orders: 293, target_assembled: 294, actual_assembled: 300, target_shipped: 294, actual_shipped: 297, ending_backlog: 5, on_time_ship_rate: 0.993 },
   ],
   orders_summary: {
-    on_time_48h_rate: 0.968,
+    on_time_48h_rate: 0.991,
     on_time_ship_target: 0.98,
     ship_within_hours: 48,
-    total_orders: 1240,
-    shipped_orders: 1196,
-    latest_backlog: 18,
+    total_orders: 18240,
+    shipped_orders: 17680,
+    latest_backlog: 5,
   },
   quality: {
     pareto: [
-      { label: "Late Shipment", count: 24 },
-      { label: "Wrong Assembly", count: 18 },
-      { label: "Damaged Return", count: 9 },
-      { label: "Cosmetic Defect", count: 8 },
-      { label: "Packaging Error", count: 7 },
+      { label: "Late Shipment", count: 142 },
+      { label: "Wrong Assembly", count: 128 },
+      { label: "Cosmetic Defect", count: 96 },
+      { label: "Packaging Error", count: 88 },
+      { label: "Damaged Return", count: 76 },
+      { label: "Missing Component", count: 72 },
+      { label: "Hair Detachment", count: 64 },
+      { label: "Torso Seam Defect", count: 58 },
+      { label: "Paint Run / Overspray", count: 52 },
+      { label: "Open Stitch / Seam", count: 46 },
+      { label: "Magnet Alignment", count: 42 },
+      { label: "Joint Play / Loose Fit", count: 38 },
+      { label: "Adhesive Bleed", count: 34 },
+      { label: "Label / SKU Mismatch", count: 28 },
     ],
     root_causes: [
-      { label: "Unclear Work Instruction", count: 28 },
-      { label: "Training Gap", count: 14 },
-      { label: "Wrong Part in Bin", count: 12 },
+      { label: "Unclear Work Instruction", count: 118 },
+      { label: "Training Gap", count: 96 },
+      { label: "Wrong Part in Bin", count: 88 },
+      { label: "Supplier Variation", count: 82 },
+      { label: "Rush / Capacity Overload", count: 74 },
+      { label: "Shipping Damage", count: 68 },
+      { label: "Tool or Jig Issue", count: 62 },
+      { label: "Material Batch Variation", count: 54 },
+      { label: "Fixture Wear / Wear-in Drift", count: 48 },
+      { label: "Environmental Control Gap", count: 42 },
+      { label: "System or Data Error", count: 36 },
+      { label: "Supplier Defect", count: 32 },
+      { label: "Tool or Jig Misalignment", count: 28 },
     ],
-    dpmo: 3900,
+    dpmo: 3180,
     dpmo_target: 3400,
-    process_yield: 0.953,
+    process_yield: 0.947,
     rty_target: 0.95,
     configuration_accuracy: 0.982,
     configuration_accuracy_target: 0.99,
     cpk: 1.21,
     cpk_target: 1.33,
-    total_defect_units: 58,
+    total_defect_units: 964,
     copq_total_90d: 28450,
     copq_breakdown: {
       quality_cost_lines: { scrap: 1200, rework: 3400, return_cost: 800, warranty: 450, expedite: 600 },
@@ -1294,17 +1328,19 @@ const MOCK_OPERATIONAL = {
       { year_month: "2026-04", defect_units: 28 },
     ],
     dpmo_basis: {
-      order_count: 1240,
-      shipped_count: 1196,
-      recent_throughput_units: 282,
-      units_for_dpmo: 1240,
-      defect_units: 58,
+      order_count: 18240,
+      shipped_count: 17680,
+      recent_throughput_units: 588,
+      units_for_dpmo: 18240,
+      defect_units: 964,
       opportunities_per_unit: 12,
     },
     defect_types: [
       { id: 1, defect_code: "wrong_assembly", defect_name: "Wrong Assembly" },
       { id: 2, defect_code: "damaged_return", defect_name: "Damaged Return" },
       { id: 3, defect_code: "missing_component", defect_name: "Missing Component" },
+      { id: 4, defect_code: "paint_run", defect_name: "Paint Run / Overspray" },
+      { id: 5, defect_code: "label_mismatch", defect_name: "Label / SKU Mismatch" },
     ],
   },
   capa: [
@@ -1914,7 +1950,17 @@ function App() {
             </Drawer>
           )}
 
-          <Box component="main" sx={{ flexGrow: 1, p: 3, mt: 8, minWidth: 0 }}>
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              minWidth: 0,
+              mt: 8,
+              px: { xs: 2, sm: 3 },
+              pt: { xs: 2, sm: 3 },
+              pb: { xs: 4, sm: 5 },
+            }}
+          >
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/upload" element={<UploadData />} />
@@ -2365,9 +2411,9 @@ function escapeHtml(s) {
 const DAILY_PLAN_UNIT_CHK_CAP = 24;
 
 /**
- * Printable daily plan: timeline checklists + per-unit checkboxes for increments + defects section (Quality / Six Sigma).
+ * Full HTML document for the daily production & fulfillment plan (print or PDF).
  */
-function openDailyPlanFormWindow(opts) {
+function buildDailyPlanFullHtml(opts) {
   const {
     planDateLabel,
     planTotalDolls,
@@ -2377,11 +2423,6 @@ function openDailyPlanFormWindow(opts) {
     fulfillmentCheckpoints,
     shipHours,
   } = opts;
-
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (!w) {
-    return false;
-  }
 
   const teamRows = (productionPlan?.rows ?? [])
     .map(
@@ -2457,11 +2498,14 @@ function openDailyPlanFormWindow(opts) {
   .toolbar { margin: 1rem 0; }
   button { font: inherit; padding: 0.5rem 1rem; border-radius: 8px; border: none; background: #5c4d8a; color: #fff; cursor: pointer; font-weight: 700; }
   button:hover { filter: brightness(1.05); }
+  h2 { page-break-after: avoid; }
+  .bar { page-break-after: avoid; }
   @media print {
     body { background: #fff; }
     .toolbar, button { display: none !important; }
     .sheet { max-width: none; padding: 0; }
-    table { break-inside: avoid; }
+    table { break-inside: auto; }
+    tr { page-break-inside: avoid; }
   }
 </style></head><body>
 <div class="bar"><h1>Daily production &amp; fulfillment plan</h1>
@@ -2488,9 +2532,62 @@ function openDailyPlanFormWindow(opts) {
 <script>document.querySelector("button")?.focus();</script>
 </body></html>`;
 
+  return html;
+}
+
+/** Opens the daily plan in a new tab for browser print / Save as PDF. */
+function openDailyPlanFormWindow(opts) {
+  const html = buildDailyPlanFullHtml(opts);
+  const w = window.open("", "_blank", "noopener,noreferrer");
+  if (!w) {
+    return false;
+  }
   w.document.write(html);
   w.document.close();
   return true;
+}
+
+/**
+ * Renders the daily plan in a hidden frame and downloads a PDF (A4, client-side).
+ */
+async function downloadDailyPlanPdf(opts) {
+  const html = buildDailyPlanFullHtml(opts);
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("title", "Daily plan PDF export");
+  iframe.style.cssText = "position:fixed;left:-12000px;top:0;width:920px;height:20000px;border:0;opacity:0;pointer-events:none";
+  document.body.appendChild(iframe);
+  const idoc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!idoc) {
+    iframe.remove();
+    throw new Error("Could not create export frame.");
+  }
+  idoc.open();
+  idoc.write(html);
+  idoc.close();
+  await new Promise((resolve) => {
+    iframe.onload = () => resolve();
+    setTimeout(resolve, 600);
+  });
+  const root = idoc.body;
+  if (!root) {
+    iframe.remove();
+    throw new Error("Empty export document.");
+  }
+  const rawLabel = String(opts.planDateLabel || "plan").replace(/[/\\?%*:|"<>]/g, "-");
+  const filename = `OptiDoll-Daily-Plan-${rawLabel}.pdf`;
+  const html2pdf = (await import("html2pdf.js")).default;
+  await html2pdf()
+    .set({
+      margin: [10, 10, 10, 10],
+      filename,
+      image: { type: "jpeg", quality: 0.92 },
+      html2canvas: { scale: 2, useCORS: true, logging: false, letterRendering: true },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"] },
+    })
+    .from(root)
+    .save();
+  iframe.remove();
 }
 
 /** Trim cells, drop blank lines, strip BOM, normalize header names to canonical spelling when case-only differs; pad ragged rows for display. */
@@ -4426,6 +4523,8 @@ function Orders() {
   const [planBacklogStr, setPlanBacklogStr] = useState("");
   const [planNewOrdersStr, setPlanNewOrdersStr] = useState("");
   const [planGeneratedAt, setPlanGeneratedAt] = useState(null);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [ordersPlanSnack, setOrdersPlanSnack] = useState({ open: false, message: "", severity: "success" });
 
   useEffect(() => {
     setPlanBacklogStr(String(defaultPlanBacklog));
@@ -4452,8 +4551,8 @@ function Orders() {
 
   const planDateLabel = daily.length ? daily[daily.length - 1]?.target_date ?? new Date().toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
 
-  const exportDailyPlan = () => {
-    const ok = openDailyPlanFormWindow({
+  const dailyPlanExportOpts = useMemo(
+    () => ({
       planDateLabel,
       planTotalDolls,
       planBacklogQty,
@@ -4461,9 +4560,42 @@ function Orders() {
       productionPlan,
       fulfillmentCheckpoints,
       shipHours,
-    });
+    }),
+    [planDateLabel, planTotalDolls, planBacklogQty, planNewOrdersQty, productionPlan, fulfillmentCheckpoints, shipHours]
+  );
+
+  const openDailyPlanPrintPreview = () => {
+    const ok = openDailyPlanFormWindow(dailyPlanExportOpts);
     if (!ok) {
-      window.alert("Could not open the print window. Allow pop-ups for this site and try again.");
+      setOrdersPlanSnack({
+        open: true,
+        severity: "warning",
+        message: "Could not open print preview. Allow pop-ups for this site and try again.",
+      });
+    }
+  };
+
+  const exportDailyPlan = async () => {
+    setPdfExporting(true);
+    try {
+      await downloadDailyPlanPdf(dailyPlanExportOpts);
+      const rawLabel = String(planDateLabel || "plan").replace(/[/\\?%*:|"<>]/g, "-");
+      setOrdersPlanSnack({
+        open: true,
+        message: `Downloaded OptiDoll-Daily-Plan-${rawLabel}.pdf`,
+        severity: "success",
+      });
+    } catch (e) {
+      const opened = openDailyPlanFormWindow(dailyPlanExportOpts);
+      setOrdersPlanSnack({
+        open: true,
+        severity: opened ? "warning" : "error",
+        message: opened
+          ? "PDF export failed; opened a print-friendly tab — use Print → Save as PDF."
+          : `${e?.message || "PDF export failed."} Allow downloads, relax strict blockers, allow pop-ups, then try again.`,
+      });
+    } finally {
+      setPdfExporting(false);
     }
   };
 
@@ -4522,7 +4654,21 @@ function Orders() {
       <ActionRow
         actions={[
           { label: "Generate Order Plan", variant: "contained", color: "secondary", onClick: regenerateProductionPlan },
-          { label: "Export Daily Plan", variant: "outlined", color: "secondary", onClick: exportDailyPlan },
+          {
+            label: "Export Daily Plan",
+            variant: "outlined",
+            color: "secondary",
+            onClick: exportDailyPlan,
+            loading: pdfExporting,
+            loadingLabel: "Building PDF…",
+          },
+          {
+            label: "Print preview",
+            variant: "text",
+            color: "secondary",
+            onClick: openDailyPlanPrintPreview,
+            disabled: pdfExporting,
+          },
           { label: "Approve Order", variant: "contained", color: "success" },
           { label: "Review Risk", variant: "contained", color: "warning" },
         ]}
@@ -4760,6 +4906,17 @@ function Orders() {
           loading={operationalLoading}
         />
       </CardBox>
+
+      <Snackbar
+        open={ordersPlanSnack.open}
+        autoHideDuration={6500}
+        onClose={() => setOrdersPlanSnack((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={ordersPlanSnack.severity} onClose={() => setOrdersPlanSnack((s) => ({ ...s, open: false }))} sx={{ width: "100%" }}>
+          {ordersPlanSnack.message}
+        </Alert>
+      </Snackbar>
     </Page>
   );
 }
@@ -5666,20 +5823,37 @@ function Settings() {
 
 function NotFound() {
   return (
-    <Page title="Page Not Found" subtitle="Use the left navigation to continue.">
-      <Alert severity="info">The requested page does not exist.</Alert>
+    <Page title="Page Not Found" subtitle="The route you opened is not part of this app. Use the sidebar or go home.">
+      <Stack alignItems="center" sx={{ py: { xs: 4, sm: 6 } }}>
+        <Card elevation={0} sx={{ width: 1, maxWidth: 440, textAlign: "center", ...CARD_POLISH_SX, borderRadius: 2 }}>
+          <CardContent sx={{ py: 3 }}>
+            <Typography variant="overline" sx={{ letterSpacing: "0.2em", color: "text.secondary" }}>
+              Error
+            </Typography>
+            <Typography variant="h3" sx={{ fontWeight: 800, my: 1, color: "primary.main" }}>
+              404
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 2.5, lineHeight: 1.55 }}>
+              This URL does not match any screen in OptiDoll Sigma.
+            </Typography>
+            <Button component={Link} to="/" variant="contained" size="large">
+              Back to Executive Overview
+            </Button>
+          </CardContent>
+        </Card>
+      </Stack>
     </Page>
   );
 }
 
 function Page({ title, subtitle, children }) {
   return (
-    <Box sx={{ pb: 2 }}>
-      <Typography variant="h4" sx={{ mb: 0.5 }}>
+    <Box sx={{ pb: { xs: 2.5, sm: 3 }, maxWidth: PAGE_MAX_WIDTH_PX, mx: "auto", width: 1 }}>
+      <Typography variant="h4" component="h1" sx={{ fontWeight: 800, letterSpacing: "-0.02em", mb: 0.5, color: "text.primary" }}>
         {title}
       </Typography>
       {subtitle ? (
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 2.5 }}>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: { xs: 2, sm: 3 }, maxWidth: "72ch", lineHeight: 1.55 }}>
           {subtitle}
         </Typography>
       ) : null}
@@ -5688,20 +5862,29 @@ function Page({ title, subtitle, children }) {
   );
 }
 
+function kpiStatusChipLabel(color) {
+  const c = String(color || "primary");
+  if (c === "success") return "Good";
+  if (c === "warning") return "Watch";
+  if (c === "error") return "Risk";
+  if (c === "secondary") return "Focus";
+  return "Info";
+}
+
 function KpiCard({ title, value, subtitle, color = "primary" }) {
   return (
-    <Card sx={{ height: "100%" }}>
-      <CardContent>
-        <Typography color="text.secondary" variant="body2">
+    <Card elevation={0} sx={{ height: "100%", borderRadius: 2, ...CARD_POLISH_SX }}>
+      <CardContent sx={{ p: { xs: 2, sm: 2.25 }, "&:last-child": { pb: { xs: 2, sm: 2.25 } } }}>
+        <Typography color="text.secondary" variant="body2" sx={{ fontWeight: 600 }}>
           {title}
         </Typography>
-        <Typography variant="h4" sx={{ mt: 1, fontWeight: 700 }}>
+        <Typography variant="h4" sx={{ mt: 1, fontWeight: 800, letterSpacing: "-0.02em", fontSize: { xs: "1.5rem", sm: "1.75rem" } }}>
           {value}
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.45 }}>
           {subtitle}
         </Typography>
-        <Chip color={color} label={color.toUpperCase()} size="small" sx={{ mt: 2 }} />
+        <Chip color={color} label={kpiStatusChipLabel(color)} size="small" sx={{ mt: 2, fontWeight: 700 }} />
       </CardContent>
     </Card>
   );
@@ -5709,9 +5892,9 @@ function KpiCard({ title, value, subtitle, color = "primary" }) {
 
 function CardBox({ title, children }) {
   return (
-    <Card>
-      <CardContent>
-        <Typography variant="h6" sx={{ mb: 2, fontWeight: 700 }}>
+    <Card elevation={0} sx={{ mb: 2.5, borderRadius: 2, ...CARD_POLISH_SX }}>
+      <CardContent sx={{ p: { xs: 2, sm: 2.5 }, "&:last-child": { pb: { xs: 2, sm: 2.5 } } }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 800, letterSpacing: "0.01em" }}>
           {title}
         </Typography>
         {children}
@@ -5990,13 +6173,19 @@ function ActionRow({ actions }) {
 
   return (
     <>
-      <Stack direction="row" spacing={1.5} sx={{ mb: 2.5, flexWrap: "wrap" }}>
+      <Stack direction="row" spacing={1.5} sx={{ mb: 3, flexWrap: "wrap", gap: 1, rowGap: 1.25 }}>
         {resolved.map((a) => (
-          <Tooltip key={a.label} title={`${a.label} action`} arrow {...TOOLTIP_DELAY_PROPS}>
+          <Tooltip
+            key={a.label}
+            title={a.loading ? "Working…" : `${a.label} action`}
+            arrow
+            {...TOOLTIP_DELAY_PROPS}
+          >
             <Button
               variant={a.variant}
               color={a.color}
               size={a.size}
+              disabled={Boolean(a.disabled || a.loading)}
               onClick={() => {
                 if (typeof a.onClick === "function") {
                   a.onClick();
@@ -6005,8 +6194,9 @@ function ActionRow({ actions }) {
                 onActionClick(a.label);
               }}
               aria-label={a.label}
+              startIcon={a.loading ? <CircularProgress size={14} thickness={5} color="inherit" /> : undefined}
             >
-              {a.label}
+              {a.loading && a.loadingLabel ? a.loadingLabel : a.label}
             </Button>
           </Tooltip>
         ))}
@@ -6119,14 +6309,14 @@ function SimpleTable({ columns, rows, loading = false }) {
   };
 
   return (
-    <Card>
-      <CardContent>
+    <Card elevation={0} sx={{ mb: 2.5, borderRadius: 2, ...CARD_POLISH_SX }}>
+      <CardContent sx={{ p: { xs: 2, sm: 2.5 }, "&:last-child": { pb: { xs: 2, sm: 2.5 } } }}>
         <TextField
           size="small"
-          placeholder="Search rows..."
+          placeholder="Search rows…"
           value={searchText}
           onChange={(event) => setSearchText(event.target.value)}
-          sx={{ mb: 1.5, maxWidth: 320 }}
+          sx={{ mb: 2, maxWidth: 360, width: { xs: 1, sm: "auto" } }}
           aria-label="Search table rows"
           InputProps={{
             startAdornment: (
@@ -6147,13 +6337,13 @@ function SimpleTable({ columns, rows, loading = false }) {
             <TableContainer
               component={Paper}
               variant="outlined"
-              sx={{ maxHeight: 420, borderRadius: 2, borderColor: "#e6ebf2", boxShadow: "none" }}
+              sx={{ maxHeight: 420, borderRadius: 2, borderColor: "rgba(15,23,42,0.1)", boxShadow: "none" }}
             >
               <Table stickyHeader size="small" aria-label="data table">
                 <TableHead>
                   <TableRow>
                     {columns.map((c, index) => (
-                      <TableCell key={c} sx={{ fontWeight: 700, bgcolor: "#f8fafc" }}>
+                      <TableCell key={c} sx={{ fontWeight: 700, bgcolor: (t) => t.palette.grey[50] }}>
                         <TableSortLabel
                           active={sortConfig.index === index}
                           direction={sortConfig.index === index ? sortConfig.direction : "asc"}
@@ -6204,7 +6394,9 @@ function SimpleTable({ columns, rows, loading = false }) {
             </Stack>
           </>
         ) : (
-          <Typography color="text.secondary">No records available.</Typography>
+          <Typography color="text.secondary" sx={{ py: 2, textAlign: "center", fontStyle: "italic" }}>
+            No records match the current filter.
+          </Typography>
         )}
       </CardContent>
     </Card>
